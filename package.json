@@ -1,0 +1,11 @@
+{
+  "name": "cineai-root",
+  "version": "1.0.0",
+  "description": "Root forwarding package for Cine AI",
+  "scripts": {
+    "start": "npm start --prefix cineai",
+    "android": "npm run android --prefix cineai",
+    "ios": "npm run ios --prefix cineai",
+    "web": "npm run web --prefix cineai"
+  }
+}
