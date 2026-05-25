@@ -10,8 +10,19 @@ try:
         class MockAbout:
             __version__ = bcrypt.__version__
         bcrypt.__about__ = MockAbout()
+        
+    # Patch hashpw to safely truncate inputs > 72 bytes, preventing ValueError inside passlib self-test
+    original_hashpw = bcrypt.hashpw
+    def patched_hashpw(password, salt):
+        if isinstance(password, bytes) and len(password) > 72:
+            password = password[:72]
+        elif isinstance(password, str) and len(password.encode("utf-8")) > 72:
+            password = password.encode("utf-8")[:72]
+        return original_hashpw(password, salt)
+    bcrypt.hashpw = patched_hashpw
 except ImportError:
     pass
+
 
 from passlib.context import CryptContext
 
