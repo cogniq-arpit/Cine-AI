@@ -180,8 +180,10 @@ const SuggestionChip: React.FC<SuggestionChipProps> = React.memo(({ prompt, onPr
 
 // ─── Netflix + Letterboxd Recommendation Card ──────────────────────────────
 const RecommendationCard: React.FC<{ movie: Movie; onPress: (m: Movie) => void }> = React.memo(({ movie, onPress }) => {
+  if (!movie) return null;
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlistStore();
   const isSaved = isInWatchlist(movie.id);
+
 
   const handleWatchlistPress = useCallback((e: any) => {
     e.stopPropagation();
@@ -1051,7 +1053,8 @@ const styles = StyleSheet.create({
     alignSelf: 'flex-end',
   },
   recsScroll: { marginTop: Spacing.md, marginHorizontal: -Spacing.xs },
-  recsContent: { paddingHorizontal: Spacing.xs, gap: Spacing.sm },
+  recsContent: { flexDirection: 'row', paddingHorizontal: Spacing.xs, gap: Spacing.sm },
+
   moodTagsRow: {
     flexDirection: 'row',
     flexWrap: 'wrap',

@@ -132,6 +132,46 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     let assistantMessage: ChatMessage | null = null;
 
+    // Helper to parse backend JSON and fetch rich movies from OMDb
+    const parseBackendJSONAndFetch = async (rawContent: string): Promise<{ text: string, movies: Movie[], tags: string[] }> => {
+      try {
+        const clean = rawContent.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+        const parsed = JSON.parse(clean);
+        if (parsed && typeof parsed === 'object' && parsed.message) {
+          const queries = parsed.movieSearchQueries || [];
+          const movies: Movie[] = [];
+          for (const title of queries.slice(0, 5)) {
+            if (title?.trim()) {
+              try {
+                const res = await omdbApi.searchMovies(title.trim(), 1);
+                if (res.results.length > 0) {
+                  const m = res.results[0];
+                  if (!movies.find(x => x.id === m.id)) {
+                    movies.push(m);
+                  }
+                }
+              } catch {}
+            }
+          }
+          return {
+            text: parsed.message,
+            movies,
+            tags: parsed.moodTags || ['curated']
+          };
+        }
+      } catch (err) {
+        console.warn('Failed to parse backend content as structured JSON, falling back to regex...', err);
+      }
+      
+      // Fallback: use raw text and regex
+      const fetched = await extractAndFetchMovies(rawContent);
+      return {
+        text: rawContent,
+        movies: fetched,
+        tags: ['curated', 'recommended']
+      };
+    };
+
     try {
       // If user is authenticated AND is not a guest, call the real FastAPI backend first!
       const isLoggedIn = !!useAuthStore.getState().user && !useAuthStore.getState().isGuest;
@@ -139,49 +179,48 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       if (isLoggedIn) {
         try {
           const backendRes = await chatService.postMessage(session.id, content);
-          const fetchedMovies = await extractAndFetchMovies(backendRes.content);
+          const parsedRes = await parseBackendJSONAndFetch(backendRes.content);
           
           assistantMessage = {
             id: generateMsgId(),
             role: 'assistant',
-            content: backendRes.content,
-            movies: fetchedMovies.map((movie: Movie) => ({
+            content: parsedRes.text,
+            movies: parsedRes.movies.map((movie: Movie) => ({
               movie,
               reason: 'AI recommended based on your request',
-              mood_tags: ['curated', 'recommended'],
+              mood_tags: parsedRes.tags,
             })),
             timestamp: new Date().toISOString(),
           };
         } catch (backendErr) {
-          console.warn('FastAPI Chat backend offline or failed. Falling back to Gemini Client...', backendErr);
+          console.warn('FastAPI Chat backend failed. Falling back to Guest secure handler...', backendErr);
         }
       }
 
-      // If backend failed OR user is a guest, use local Gemini direct integration!
+      // If backend failed OR user is a guest, use our secure FastAPI guest chatbot proxy!
       if (!assistantMessage) {
-        const userContext = {
-          favoriteGenres: profile?.favorite_genres?.map(String) || [],
-          recentlyWatched: [],
-        };
+        const historyContext = (session.messages || []).map(msg => ({
+          role: msg.role,
+          content: msg.content,
+        }));
 
-        const aiResponse = await aiService.sendMessage(
-          content,
-          session.messages || [],
-          userContext
-        );
+        const backendRes = await chatService.postGuestMessage(content, historyContext);
+        const parsedRes = await parseBackendJSONAndFetch(backendRes.content);
 
         assistantMessage = {
           id: generateMsgId(),
           role: 'assistant',
-          content: aiResponse.message,
-          movies: aiResponse.movies.map((movie: Movie) => ({
+          content: parsedRes.text,
+          movies: parsedRes.movies.map((movie: Movie) => ({
             movie,
             reason: 'AI recommended based on your request',
-            mood_tags: aiResponse.moodTags,
+            mood_tags: parsedRes.tags,
           })),
           timestamp: new Date().toISOString(),
         };
       }
+
+
 
       const finalMessages = [...updatedMessages, assistantMessage];
       const finalSession: ChatSession = {

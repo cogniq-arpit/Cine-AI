@@ -13,7 +13,8 @@ async_engine = create_async_engine(
     echo=False,
     pool_pre_ping=True,
     pool_size=20,
-    max_overflow=10
+    max_overflow=10,
+    connect_args={"statement_cache_size": 0}
 )
 
 # Async session pool creator

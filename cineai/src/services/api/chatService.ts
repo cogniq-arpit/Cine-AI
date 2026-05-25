@@ -30,6 +30,18 @@ export const chatService = {
   },
 
   /**
+   * Submits a guest prompt message to the secure chatbot proxy.
+   */
+  postGuestMessage: async (prompt: string, context: { role: string; content: string }[]): Promise<{ content: string }> => {
+    const response = await apiClient.post<{ content: string }>('/chat/guest/message', {
+      prompt,
+      context,
+    });
+    return response.data;
+  },
+
+
+  /**
    * Retrieves chatbot conversation log history for a specific persistent session token.
    */
   getHistory: async (sessionToken: string): Promise<ChatMessageResponse[]> => {

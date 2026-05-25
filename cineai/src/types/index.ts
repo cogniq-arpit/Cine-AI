@@ -255,6 +255,7 @@ export type RootStackParamList = {
   Main: undefined;
   MovieDetails: { movieId: number };
   ChatSession: { sessionId?: string };
+  Onboarding: undefined;
 };
 
 export type AuthStackParamList = {

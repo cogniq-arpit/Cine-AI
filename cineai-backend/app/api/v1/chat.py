@@ -7,10 +7,17 @@ from app.db.session import get_db
 from app.api.deps import get_current_user
 from app.models.user import User
 from app.models.chat import ChatHistory
-from app.schemas.chat import ChatMessageCreate, ChatMessageResponse, ChatSessionHistoryResponse
+from app.schemas.chat import (
+    ChatMessageCreate,
+    ChatMessageResponse,
+    ChatSessionHistoryResponse,
+    GuestChatMessageCreate,
+    GuestChatMessageResponse,
+)
 from app.services.ai_service import ai_service
 
 router = APIRouter(tags=["AI Chatbot"])
+
 
 @router.post("/message", response_model=ChatMessageResponse)
 async def post_chat_message(
@@ -70,3 +77,21 @@ async def get_session_history(
     result = await db.execute(query)
     messages = result.scalars().all()
     return messages
+
+@router.post("/guest/message", response_model=GuestChatMessageResponse)
+async def post_guest_chat_message(
+    schema: GuestChatMessageCreate,
+):
+    """Handles guest chat requests by securely forwarding prompts and context to Gemini on the server side."""
+    # Context format expected: [{"role": "user"|"model", "parts": [{"text": "..."}]}]
+    # Map 'assistant' role to 'model' for compatibility
+    mapped_context = []
+    for msg in schema.context:
+        mapped_context.append({
+            "role": "model" if msg.get("role") == "assistant" else "user",
+            "content": msg.get("content", "")
+        })
+    
+    ai_response = await ai_service.generate_chat_response(schema.prompt, mapped_context)
+    return GuestChatMessageResponse(content=ai_response)
+

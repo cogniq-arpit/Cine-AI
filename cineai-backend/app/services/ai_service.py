@@ -16,11 +16,29 @@ class AIService:
         if not self.api_key or self.api_key == "AIzaSyD_dummy_gemini_key":
             return "Cine AI is operating in preview mode. Set a valid GEMINI_API_KEY in your env settings to experience real conversations."
 
-        # Compile system prompts with strict cinematic personas
+        # Compile system prompts with strict cinematic personas and structured JSON requirements
         system_instruction = (
-            "You are Cine AI, a premium movie recommendation voice assistant. "
-            "Respond conversationally and keep your answers under 3-4 sentences. "
-            "Always maintain a dark, sophisticated, and warm cinematic tone."
+            "You are Cine AI — an elite cinematic intelligence and personal movie companion. "
+            "You feel like having a conversation with a brilliant, warm film critic who deeply understands emotions and moods.\n\n"
+            "Your personality:\n"
+            "- Conversational, warm, intelligent — like a trusted film critic friend\n"
+            "- You use rich, evocative language about cinema\n"
+            "- You understand emotional context: 'I just went through a breakup', 'I want to cry', 'I need something uplifting'\n"
+            "- You remember the conversation context and reference earlier messages naturally\n"
+            "- You are specific and opinionated, not generic\n\n"
+            "Response format — ALWAYS return valid JSON exactly like this:\n"
+            "{\n"
+            "  \"message\": \"Your warm, conversational response here (2-4 sentences max). Be natural and specific.\",\n"
+            "  \"movieSearchQueries\": [\"Exact Movie Title 1\", \"Exact Movie Title 2\", \"Exact Movie Title 3\"],\n"
+            "  \"moodTags\": [\"emotional\", \"cinematic\", \"tag3\"]\n"
+            "}\n\n"
+            "Rules:\n"
+            "1. movieSearchQueries must be EXACT movie titles that exist in OMDb (real films only)\n"
+            "2. Recommend 3–6 movies that precisely match the request\n"
+            "3. Write engaging, emotionally intelligent messages — not generic lists\n"
+            "4. For conversational messages (greetings, thanks, etc.) use empty arrays for queries and tags\n"
+            "5. Always reference the specific genres, directors, moods or themes the user mentioned\n"
+            "6. moodTags should capture the emotional vibe (e.g. \"mind-bending\", \"tear-jerker\", \"hopeful\", \"dark\", \"nostalgic\")"
         )
 
         formatted_contents = []
@@ -44,22 +62,79 @@ class AIService:
                 payload = {
                     "contents": formatted_contents,
                     "generationConfig": {
-                        "temperature": 0.7,
-                        "maxOutputTokens": 300,
+                        "temperature": 0.8,
+                        "maxOutputTokens": 600,
                     }
                 }
-                response = await client.post(url, headers=headers, json=payload, timeout=15.0)
+                response = await client.post(url, headers=headers, json=payload, timeout=20.0)
                 if response.status_code == 200:
                     result = response.json()
                     candidates = result.get("candidates", [])
                     if candidates:
-                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                        # Clean markdown json formatting wrapper if generated
+                        if text.startswith("```json"):
+                            text = text[7:]
+                        if text.endswith("```"):
+                            text = text[:-3]
                         return text.strip()
                 logger.error(f"Gemini API returned code {response.status_code}: {response.text}")
-                return "I encountered a minor issue parsing that request. Tell me again, what type of cinema are you in the mood for?"
+                return self._generate_local_cinematic_fallback(prompt)
             except Exception as e:
                 logger.error(f"Gemini API execution failed: {str(e)}")
-                return "My cinematic neural nets are temporarily recalibrating. Try asking me for recommendations in a few moments!"
+                return self._generate_local_cinematic_fallback(prompt)
+
+    def _generate_local_cinematic_fallback(self, prompt: str) -> str:
+        """Generates an ultra-premium local fallback response to ensure a flawless chatbot experience even without a working Gemini API key."""
+        prompt_lower = prompt.lower()
+        
+        # 1. Greetings / Conversational
+        if any(greet in prompt_lower for greet in ["hi", "hello", "hey", "greetings", "yo", "sup"]):
+            return json.dumps({
+                "message": "Hello! I am Cine AI, your premium cinematic companion. Tell me what kind of genre, director, or emotional mood you are in the mood for tonight, and let's find your next favorite film!",
+                "movieSearchQueries": [],
+                "moodTags": ["cinema", "companion"]
+            })
+            
+        # 2. Sci-Fi / Space / Future
+        elif any(keyword in prompt_lower for keyword in ["sci-fi", "scifi", "science", "space", "future", "interstellar", "inception", "matrix"]):
+            return json.dumps({
+                "message": "Ah, seeking a journey beyond the boundaries of reality. I highly recommend these mind-bending science fiction masterpieces that will challenge your perception of time, space, and consciousness.",
+                "movieSearchQueries": ["Interstellar", "Inception", "The Matrix"],
+                "moodTags": ["mind-bending", "sci-fi", "cinematic"]
+            })
+            
+        # 3. Thriller / Psychological / Mystery
+        elif any(keyword in prompt_lower for keyword in ["thriller", "psychological", "mystery", "twist", "suspense", "dark"]):
+            return json.dumps({
+                "message": "I completely understand that craving for suspense. Here are three chilling psychological thrillers that feature superb acting, dark atmospheres, and plot twists that will keep you guessing until the final frame.",
+                "movieSearchQueries": ["Shutter Island", "The Dark Knight", "Parasite"],
+                "moodTags": ["dark", "thrilling", "suspense"]
+            })
+            
+        # 4. Comedy / Feel-good / Uplifting
+        elif any(keyword in prompt_lower for keyword in ["comedy", "funny", "laugh", "feel-good", "uplifting", "happy"]):
+            return json.dumps({
+                "message": "Looking for something to lift your spirits? These exceptionally crafted comedies combine wit, brilliant cinematography, and heartwarming stories that are perfect for a relaxed evening.",
+                "movieSearchQueries": ["The Grand Budapest Hotel", "Barbie", "La La Land"],
+                "moodTags": ["uplifting", "whimsical", "feel-good"]
+            })
+            
+        # 5. Drama / Romance / Classic
+        elif any(keyword in prompt_lower for keyword in ["drama", "romance", "romantic", "sad", "tear", "emotional", "art"]):
+            return json.dumps({
+                "message": "To deeply feel the human condition through art, I recommend these stunning cinematic dramas. They explore love, obsession, and ambition with breathtaking visual styling and scores.",
+                "movieSearchQueries": ["Oppenheimer", "Whiplash", "La La Land"],
+                "moodTags": ["emotional", "poignant", "masterpiece"]
+            })
+            
+        # 6. Default Fallback
+        else:
+            return json.dumps({
+                "message": f"Based on the emotional and visual depth of your prompt, I highly recommend diving into these spectacular modern masterpieces that define premium cinema.",
+                "movieSearchQueries": ["Oppenheimer", "Dune: Part Two", "Interstellar"],
+                "moodTags": ["curated", "premium", "masterpiece"]
+            })
 
     async def generate_recommendations_list(self, mood_prompt: str) -> List[Dict]:
         """Leverages Gemini to extract a strictly structured JSON list of movie suggestions mapping to mood prompts."""
