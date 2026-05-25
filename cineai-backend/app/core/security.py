@@ -1,11 +1,23 @@
 from datetime import datetime, timedelta, timezone
 from jose import jwt, JWTError
-from passlib.context import CryptContext
 from typing import Optional, Dict
 from app.core.config import settings
 
+# Workaround for passlib + bcrypt 4.0+ compatibility in Python 3.11/3.12+
+try:
+    import bcrypt
+    if not hasattr(bcrypt, "__about__"):
+        class MockAbout:
+            __version__ = bcrypt.__version__
+        bcrypt.__about__ = MockAbout()
+except ImportError:
+    pass
+
+from passlib.context import CryptContext
+
 # Initialize password hashing context
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verifies that a plain text password matches its Bcrypt hash."""
