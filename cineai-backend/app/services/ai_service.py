@@ -9,7 +9,7 @@ logger = logging.getLogger("cineai-ai-service")
 class AIService:
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
 
     async def generate_chat_response(self, prompt: str, chat_context: List[Dict] = None) -> str:
         """Sends the user message alongside context to Google Gemini to fetch conversational responses."""
