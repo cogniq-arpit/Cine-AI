@@ -4,7 +4,7 @@ import { ChatSession, ChatMessage, Movie } from '../types';
 import { useAuthStore } from './authStore';
 import aiService from '../services/ai';
 import { chatService } from '../services/api/chatService';
-import omdbApi from '../services/omdbApi';
+import tmdbApi from '../services/tmdbApi';
 
 const SESSIONS_KEY = '@cineai_chat_sessions';
 
@@ -35,7 +35,7 @@ const extractAndFetchMovies = async (text: string): Promise<Movie[]> => {
       const titles = quotes.map(q => q.replace(/['"]/g, '').trim()).slice(0, 4);
       for (const title of titles) {
         if (title.length > 1) {
-          const res = await omdbApi.searchMovies(title, 1);
+          const res = await tmdbApi.searchMovies(title, 1);
           if (res.results.length > 0) {
             const m = res.results[0];
             if (!movies.find(x => x.id === m.id)) {
@@ -132,7 +132,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     let assistantMessage: ChatMessage | null = null;
 
-    // Helper to parse backend JSON and fetch rich movies from OMDb
+    // Helper to parse backend JSON and fetch rich movies from TMDB
     const parseBackendJSONAndFetch = async (rawContent: string): Promise<{ text: string, movies: Movie[], tags: string[] }> => {
       try {
         const clean = rawContent.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
@@ -143,7 +143,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           for (const title of queries.slice(0, 5)) {
             if (title?.trim()) {
               try {
-                const res = await omdbApi.searchMovies(title.trim(), 1);
+                const res = await tmdbApi.searchMovies(title.trim(), 1);
                 if (res.results.length > 0) {
                   const m = res.results[0];
                   if (!movies.find(x => x.id === m.id)) {

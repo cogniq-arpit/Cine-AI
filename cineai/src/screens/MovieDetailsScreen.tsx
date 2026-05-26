@@ -21,10 +21,11 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { Colors, Radius, Motion, Spacing } from '../constants/theme';
 import { MovieDetails, CastMember, Movie, RootStackParamList } from '../types';
-import { getPosterUrl, getBackdropUrl, getProfileUrl } from '../services/omdbApi';
-import omdbApi from '../services/omdbApi';
+import { getPosterUrl, getBackdropUrl, getProfileUrl } from '../services/tmdbApi';
+import tmdbApi from '../services/tmdbApi';
 import { useWatchlistStore } from '../store/watchlistStore';
 import { MovieCard } from '../components/movie/MovieCard';
+import { movieService } from '../services/api/movieService';
 
 const { width: W, height: H } = Dimensions.get('window');
 const BACKDROP_HEIGHT = H * 0.46;
@@ -137,12 +138,17 @@ export const MovieDetailsScreen: React.FC = () => {
       setLoading(true);
       try {
         const [d, c] = await Promise.all([
-          omdbApi.getMovieDetails(movieId),
-          omdbApi.getCertification(movieId),
+          tmdbApi.getMovieDetails(movieId),
+          tmdbApi.getCertification(movieId),
         ]);
         if (active) {
           setMovie(d);
           setCert(c);
+          if (d.imdb_id) {
+            movieService.logInteraction(d.imdb_id, 'click').catch(err => {
+              console.warn('Failed to log movie click interaction:', err);
+            });
+          }
         }
       } catch (err) {
         console.error('Details fetch error:', err);

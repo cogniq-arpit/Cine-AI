@@ -18,8 +18,9 @@ class Settings(BaseSettings):
     DATABASE_URL: str = Field(default="postgresql+asyncpg://postgres:postgres@localhost:5432/postgres", env="DATABASE_URL")
     
     # Third-Party Credentials
-    GEMINI_API_KEY: str = Field(default="AIzaSyD_dummy_gemini_key", env="GEMINI_API_KEY")
-    OMDB_API_KEY: str = Field(default="dummy_omdb_key", env="OMDB_API_KEY")
+    GEMINI_API_KEY: str = Field(default="", env="GEMINI_API_KEY")
+    TMDB_API_KEY: str = Field(default="dummy_tmdb_key", env="TMDB_API_KEY")
+    TMDB_ACCESS_TOKEN: str = Field(default="dummy_tmdb_token", env="TMDB_ACCESS_TOKEN")
     
     # CORS Configurations
     BACKEND_CORS_ORIGINS: List[str] = ["*"]

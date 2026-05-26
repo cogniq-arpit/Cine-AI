@@ -1,44 +1,13 @@
-import axios from 'axios';
+import { apiClient } from './api/apiClient';
 import { Movie, MovieDetails, PaginatedResponse, TVShow, Genre, CastMember, CrewMember } from '../types';
-
-const OMDB_API_KEY = process.env.EXPO_PUBLIC_OMDB_API_KEY || process.env.VITE_OMDB_API_KEY || '3be0d3d0';
-const BASE_URL = 'https://www.omdbapi.com/';
 
 // ─── Image Fallback Placeholders ───────────────────────────────────────────
 const FALLBACK_POSTER = 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?q=80&w=342&auto=format&fit=crop';
 const FALLBACK_BACKDROP = 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?q=80&w=1280&auto=format&fit=crop';
 const FALLBACK_PROFILE = 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?q=80&w=185&auto=format&fit=crop';
 
-// ─── Client Instance ────────────────────────────────────────────────────────
-const omdbClient = axios.create({
-  baseURL: BASE_URL,
-  timeout: 10000,
-});
-
 // Cache map for API responses to improve search performance and save API hits
 const apiCache = new Map<string, any>();
-
-// Helper to run axios requests with simple cache wrapper
-const cachedGet = async (params: Record<string, any>) => {
-  const cacheKey = JSON.stringify(params);
-  if (apiCache.has(cacheKey)) {
-    return apiCache.get(cacheKey);
-  }
-  try {
-    const { data } = await omdbClient.get('', { params: { ...params, apikey: OMDB_API_KEY } });
-    if (data && data.Response === 'True') {
-      apiCache.set(cacheKey, data);
-    }
-    return data;
-  } catch (error: any) {
-    if (error?.response?.status === 401) {
-      // Return false response quietly so the application gracefully falls back to the curated dataset
-      return { Response: 'False', Error: 'OMDb API Key invalid or limit reached.' };
-    }
-    throw error;
-  }
-};
-
 
 // ─── Helper Mappers ────────────────────────────────────────────────────────
 export const imdbIdToNumber = (imdbId: string | undefined): number => {
@@ -131,7 +100,7 @@ export const getGenresListFromString = (genreString: string): Genre[] => {
 };
 
 // Safe date parser to avoid Hermes engine 'RangeError: Date value out of bounds'
-export const parseOmdbDate = (releasedStr: string | undefined, yearStr: string | undefined): string => {
+export const parseTmdbDate = (releasedStr: string | undefined, yearStr: string | undefined): string => {
   if (!releasedStr || releasedStr === 'N/A') {
     if (yearStr && yearStr !== 'N/A') {
       const year = yearStr.split('–')[0].trim();
@@ -182,7 +151,7 @@ const CURATED_DB = [
     imdbRating: '8.9',
     imdbVotes: '715,321',
     BoxOffice: '$329,862,540',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BMDBmYTZjNjUtN2M1MS00ODYzLTk4ODgtOWMzODg0YjdlYmRmXkFtZTcwMTI5OTM0Mw@@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/8Gxv2Z7Hjsug4ZgCH5z25nuREQz.jpg',
   },
   {
     imdbID: 'tt15239678',
@@ -198,7 +167,7 @@ const CURATED_DB = [
     imdbRating: '9.0',
     imdbVotes: '430,225',
     BoxOffice: '$282,144,358',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BODlhNmVkZGQtM2UxOC00ODYyLWIwOTYtZDY3YjQ3YmNmODdlXkFtZTcwMTI5OTM0Mw@@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/1pdfpwXt6tLY244TLHjRj24Zt6t.jpg',
   },
   {
     imdbID: 'tt0816692',
@@ -214,7 +183,7 @@ const CURATED_DB = [
     imdbRating: '8.7',
     imdbVotes: '2,014,562',
     BoxOffice: '$188,020,017',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BYzdjMDAxZGItMjI2My00ODA1LTlkNzItOWFjMDU5OTRlYWYyXkFtZTgwMDUwMDI0MjE@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
   },
   {
     imdbID: 'tt1375666',
@@ -230,7 +199,7 @@ const CURATED_DB = [
     imdbRating: '8.8',
     imdbVotes: '2,514,682',
     BoxOffice: '$292,576,195',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BMjAxMzY3NjcxNF5BMl5BanBnXkFtZTcwNTI5OTM0Mw@@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/ljsQgJm4w4R02oL3t78z770a2FG.jpg',
   },
   {
     imdbID: 'tt0468569',
@@ -246,7 +215,7 @@ const CURATED_DB = [
     imdbRating: '9.0',
     imdbVotes: '2,891,421',
     BoxOffice: '$534,858,444',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BMTMxNTMwODM0NF5BMl5BanBnXkFtZTcwODAyMTk2Mw@@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/qJ2tWw7512l29i1KjGo8qG71wCc.jpg',
   },
   {
     imdbID: 'tt6751668',
@@ -262,7 +231,7 @@ const CURATED_DB = [
     imdbRating: '8.5',
     imdbVotes: '912,410',
     BoxOffice: '$53,369,749',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BYWZjMjk3ZTItODQ2ZC00NTY5LWE0ZDYtZTI3MjcwN2Q5NTVkXkFtZTgwNTk5MDM5NTE@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/7omwqh3n7zVpt6N7nZ0BwQv8m2t.jpg',
   },
   {
     imdbID: 'tt0110912',
@@ -278,23 +247,23 @@ const CURATED_DB = [
     imdbRating: '8.9',
     imdbVotes: '2,185,212',
     BoxOffice: '$107,928,762',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BYTViYTE3ZGQtNDFkNC00ODYyLTkyM2ItOWFiNWM5YjdmMTA1XkFtZTcwNDc1ODYzOQ@@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/suaEOtk1N1sgg2MTM7oZd2cfVp3.jpg',
   },
   {
-    imdbID: 'tt2582802',
-    Title: 'Whiplash',
-    Year: '2014',
+    imdbID: 'tt0111161',
+    Title: 'The Shawshank Redemption',
+    Year: '1994',
     Rated: 'R',
-    Released: '10 Oct 2014',
-    Runtime: '106 min',
-    Genre: 'Drama, Music',
-    Director: 'Damien Chazelle',
-    Actors: 'Miles Teller, J.K. Simmons, Paul Reiser, Melissa Benoist',
-    Plot: 'A promising young drummer enrolls at a cut-throat music conservatory where his dreams of greatness are mentored by an instructor who will stop at nothing to realize a student\'s potential.',
-    imdbRating: '8.5',
-    imdbVotes: '942,500',
-    BoxOffice: '$13,092,000',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BMTU4NjQyODgwN15BMl5BanBnXkFtZTgwMTE4NzU1MjE@._V1_SX300.jpg',
+    Released: '14 Oct 1994',
+    Runtime: '142 min',
+    Genre: 'Drama',
+    Director: 'Frank Darabont',
+    Actors: 'Tim Robbins, Morgan Freeman',
+    Plot: 'Over the course of several years, two convicts form a friendship, seeking consolation and, eventually, redemption through basic compassion.',
+    imdbRating: '9.3',
+    imdbVotes: '2,740,000',
+    BoxOffice: '$28,341,469',
+    Poster: 'https://image.tmdb.org/t/p/w500/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg',
   },
   {
     imdbID: 'tt0133093',
@@ -310,7 +279,7 @@ const CURATED_DB = [
     imdbRating: '8.7',
     imdbVotes: '1,995,000',
     BoxOffice: '$171,479,930',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BNzQzOTk3OTAtNDQ0Zi00ZTVkLWI0MTEtMDlkQzI0NzdkNWJkXkFtZTgwNTkyMDc5MjE@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/fIE3TL7oEDK210O21gy5z25nu.jpg',
   },
   {
     imdbID: 'tt4154900',
@@ -326,7 +295,7 @@ const CURATED_DB = [
     imdbRating: '8.4',
     imdbVotes: '1,240,000',
     BoxOffice: '$858,373,000',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BMTc5MDEyNzgyMV5BMl5BanBnXkFtZTgwMzg2ODg4NzM@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/ulzhLuWrPK07P1YkdWQLZnQh1JL.jpg',
   },
   {
     imdbID: 'tt9362722',
@@ -342,7 +311,7 @@ const CURATED_DB = [
     imdbRating: '8.6',
     imdbVotes: '360,000',
     BoxOffice: '$381,311,319',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BMzI0NmFiZmItMTVhOS00NzJmLWI5NzgtMzUwMTQ4OTRhNDhhXkFtZTgwMTQ4OTRhNDhh@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/8Gxv2Z7Hjsug4ZgCH5z25nuREQz.jpg',
   },
   {
     imdbID: 'tt1517268',
@@ -358,7 +327,7 @@ const CURATED_DB = [
     imdbRating: '6.9',
     imdbVotes: '510,000',
     BoxOffice: '$636,225,983',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BNjU3N2QxNzYtMjk1NC00MTc4LTk1NTQtMmUxODY2NTA5ZTlkXkFtZTgwODg0NDkyOTE@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/iuFNMSmv2jzgj07HiZyDYBfOIeC.jpg',
   },
   {
     imdbID: 'tt3783958',
@@ -374,7 +343,7 @@ const CURATED_DB = [
     imdbRating: '8.0',
     imdbVotes: '650,000',
     BoxOffice: '$151,101,803',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BMzUzNDM2NzM2MV5BMl5BanBnXkFtZTgwNTM3NTg4OTE@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/6v4g6yW01uTmbxqwg75iEkMkrNP.jpg',
   },
   {
     imdbID: 'tt1856101',
@@ -386,11 +355,11 @@ const CURATED_DB = [
     Genre: 'Action, Drama, Sci-Fi',
     Director: 'Denis Villeneuve',
     Actors: 'Ryan Gosling, Harrison Ford, Ana de Armas, Sylvia Hoeks',
-    Plot: 'K, an officer with the Los Angeles Police Department\'s blade runner squad, uncovers a secret that could plunge what is left of society into chaos.',
+    Plot: 'K, an officer with the Los Angeles Department\'s blade runner squad, uncovers a secret that could plunge what is left of society into chaos.',
     imdbRating: '8.0',
     imdbVotes: '640,000',
     BoxOffice: '$92,054,159',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BNzA1Njg4NzYxOV5BMl5BanBnXkFtZTgwODk5NjU3MzI@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/gIZ1QniE6E77NI6lCU6MxlNBvIx.jpg',
   },
   {
     imdbID: 'tt1130884',
@@ -406,23 +375,23 @@ const CURATED_DB = [
     imdbRating: '8.2',
     imdbVotes: '1,450,000',
     BoxOffice: '$128,012,934',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BYzhiNDkyNzktNTFiYS00ZTFmLThiODUtZmI5ODlhN2UxMWE4XkFtZTcwMjc1OTExMw@@._V1_SX300.jpg',
+    Poster: 'https://image.tmdb.org/t/p/w500/4ryC88GMwAaGsj181z1Ty8K0j7q.jpg',
   },
   {
-    imdbID: 'tt2278383',
-    Title: 'The Grand Budapest Hotel',
-    Year: '2014',
+    imdbID: 'tt0137523',
+    Title: 'Fight Club',
+    Year: '1999',
     Rated: 'R',
-    Released: '28 Mar 2014',
-    Runtime: '99 min',
-    Genre: 'Adventure, Comedy, Drama',
-    Director: 'Wes Anderson',
-    Actors: 'Ralph Fiennes, F. Murray Abraham, Mathieu Amalric, Adrien Brody',
-    Plot: 'A writer relates his adventures at a renowned European resort between the first and second World Wars with a concierge who is wrongly framed for murder.',
-    imdbRating: '8.1',
-    imdbVotes: '860,000',
-    BoxOffice: '$59,300,000',
-    Poster: 'https://m.media-amazon.com/images/M/MV5BMTk5ODczODA0N15BMl5BanBnXkFtZTgwNTc3NTk2MDE@._V1_SX300.jpg',
+    Released: '15 Oct 1999',
+    Runtime: '139 min',
+    Genre: 'Drama',
+    Director: 'David Fincher',
+    Actors: 'Brad Pitt, Edward Norton, Helena Bonham Carter',
+    Plot: 'An insomniac office worker and a devil-may-care soap maker form an underground fight club that evolves into much more.',
+    imdbRating: '8.8',
+    imdbVotes: '2,214,500',
+    BoxOffice: '$37,030,102',
+    Poster: 'https://image.tmdb.org/t/p/w500/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg',
   },
 ];
 
@@ -464,24 +433,24 @@ const getLocalRecommendations = (target: MovieDetails, count = 10): Movie[] => {
     .filter(item => item.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  return scored.slice(0, count).map(item => mapOmdbToMovie(item.movie));
+  return scored.slice(0, count).map(item => mapTmdbToMovie(item.movie));
 };
 
 // ─── Direct Mapping Functions ──────────────────────────────────────────────
-export const mapOmdbToMovie = (omdb: any): Movie => {
-  const id = imdbIdToNumber(omdb.imdbID);
-  const rating = parseFloat(omdb.imdbRating || '7.5');
-  const votes = parseInt((omdb.imdbVotes || '10,000').replace(/[^0-9]/g, ''), 10) || 10000;
-  const genreIds = getGenreIdsFromString(omdb.Genre || '');
+export const mapTmdbToMovie = (movieData: any): Movie => {
+  const id = imdbIdToNumber(movieData.imdbID);
+  const rating = parseFloat(movieData.imdbRating || '7.5');
+  const votes = parseInt((movieData.imdbVotes || '10,000').replace(/[^0-9]/g, ''), 10) || 10000;
+  const genreIds = getGenreIdsFromString(movieData.Genre || '');
 
   return {
     id,
-    title: omdb.Title || '',
-    original_title: omdb.Title || '',
-    overview: omdb.Plot || 'No plot overview available.',
-    poster_path: getPosterUrl(omdb.Poster),
-    backdrop_path: getBackdropUrl(omdb.Poster),
-    release_date: parseOmdbDate(omdb.Released, omdb.Year),
+    title: movieData.Title || '',
+    original_title: movieData.Title || '',
+    overview: movieData.Plot || 'No plot overview available.',
+    poster_path: getPosterUrl(movieData.Poster),
+    backdrop_path: getBackdropUrl(movieData.Poster),
+    release_date: parseTmdbDate(movieData.Released, movieData.Year),
     vote_average: rating,
     vote_count: votes,
     popularity: rating * (votes / 50000),
@@ -492,14 +461,14 @@ export const mapOmdbToMovie = (omdb: any): Movie => {
   };
 };
 
-export const mapOmdbToMovieDetails = (omdb: any): MovieDetails => {
-  const movie = mapOmdbToMovie(omdb);
-  const runtimeMin = parseInt((omdb.Runtime || '120 min').replace(/[^0-9]/g, ''), 10) || 120;
-  const genresList = getGenresListFromString(omdb.Genre || '');
-  const revenueVal = parseInt((omdb.BoxOffice || '$0').replace(/[^0-9]/g, ''), 10) || 0;
+export const mapTmdbToMovieDetails = (movieData: any): MovieDetails => {
+  const movie = mapTmdbToMovie(movieData);
+  const runtimeMin = parseInt((movieData.Runtime || '120 min').replace(/[^0-9]/g, ''), 10) || 120;
+  const genresList = getGenresListFromString(movieData.Genre || '');
+  const revenueVal = parseInt((movieData.BoxOffice || '$0').replace(/[^0-9]/g, ''), 10) || 0;
 
   // Split actors
-  const castList: CastMember[] = (omdb.Actors || 'N/A')
+  const castList: CastMember[] = (movieData.Actors || 'N/A')
     .split(',')
     .map((nameStr: string, idx: number) => {
       const name = nameStr.trim();
@@ -515,18 +484,18 @@ export const mapOmdbToMovieDetails = (omdb: any): MovieDetails => {
 
   // Split director & writers
   const crewList: CrewMember[] = [];
-  if (omdb.Director && omdb.Director !== 'N/A') {
+  if (movieData.Director && movieData.Director !== 'N/A') {
     crewList.push({
       id: 2000,
-      name: omdb.Director.trim(),
+      name: movieData.Director.trim(),
       job: 'Director',
       department: 'Directing',
       profile_path: null,
       known_for_department: 'Directing',
     });
   }
-  if (omdb.Writer && omdb.Writer !== 'N/A') {
-    omdb.Writer.split(',').forEach((w: string, idx: number) => {
+  if (movieData.Writer && movieData.Writer !== 'N/A') {
+    movieData.Writer.split(',').forEach((w: string, idx: number) => {
       crewList.push({
         id: 3000 + idx,
         name: w.trim(),
@@ -544,7 +513,7 @@ export const mapOmdbToMovieDetails = (omdb: any): MovieDetails => {
     genres: genresList,
     production_companies: [],
     production_countries: [],
-    spoken_languages: (omdb.Language || 'English')
+    spoken_languages: (movieData.Language || 'English')
       .split(',')
       .map((l: string, idx: number) => ({
         iso_639_1: 'en',
@@ -553,19 +522,19 @@ export const mapOmdbToMovieDetails = (omdb: any): MovieDetails => {
       })),
     budget: 0,
     revenue: revenueVal,
-    imdb_id: omdb.imdbID || '',
+    imdb_id: movieData.imdbID || '',
     homepage: '',
     credits: {
       cast: castList,
       crew: crewList,
     },
-    // Safe placeholder for trailer video - using a generic search parameter so clicking YouTube works flawlessly
+    // Safe placeholder for trailer video
     videos: {
       results: [
         {
           id: '1',
-          key: `results?search_query=${encodeURIComponent((omdb.Title || '') + ' official trailer')}`,
-          name: `${omdb.Title || 'Movie'} - Official Trailer`,
+          key: `results?search_query=${encodeURIComponent((movieData.Title || '') + ' official trailer')}`,
+          name: `${movieData.Title || 'Movie'} - Official Trailer`,
           site: 'YouTube',
           type: 'Trailer',
           official: true,
@@ -604,59 +573,92 @@ const createPaginatedResponse = <T>(results: T[]): PaginatedResponse<T> => ({
   total_results: results.length,
 });
 
-// ─── Main OMDB API exports ──────────────────────────────────────────────────
-export const omdbApi = {
+// ─── Pre-mapped Curated Movie Array (no network call needed) ───────────────
+export const CURATED_MOVIES: Movie[] = CURATED_DB.map(mapTmdbToMovie);
+
+// ─── Main TMDB API exports delegating to asynchronous backend ───────────────
+export const tmdbApi = {
   // Trending Movies
   getTrending: async (timeWindow: 'day' | 'week' = 'week'): Promise<PaginatedResponse<Movie>> => {
-    // Curated movies are trending
-    const trending = CURATED_DB.slice(0, 10).map(mapOmdbToMovie);
+    try {
+      const { data } = await apiClient.get<any[]>('/movies/trending');
+      if (data && data.length > 0) {
+        return createPaginatedResponse(data.map(mapTmdbToMovie));
+      }
+    } catch (e) {
+      console.warn('Backend trending fetch failed. Falling back to local curated cache.', e);
+    }
+    const trending = CURATED_DB.slice(0, 10).map(mapTmdbToMovie);
     return createPaginatedResponse(trending);
   },
 
   // Popular Movies
   getPopular: async (page = 1): Promise<PaginatedResponse<Movie>> => {
-    const popular = CURATED_DB.slice(2, 12).map(mapOmdbToMovie);
+    try {
+      const { data } = await apiClient.get<any[]>('/movies/popular');
+      if (data && data.length > 0) {
+        return createPaginatedResponse(data.map(mapTmdbToMovie));
+      }
+    } catch (e) {
+      console.warn('Backend popular fetch failed. Falling back to local curated cache.', e);
+    }
+    const popular = CURATED_DB.slice(2, 12).map(mapTmdbToMovie);
     return createPaginatedResponse(popular);
   },
 
   // Top Rated Movies
   getTopRated: async (page = 1): Promise<PaginatedResponse<Movie>> => {
+    try {
+      const { data } = await apiClient.get<any[]>('/movies/top_rated');
+      if (data && data.length > 0) {
+        return createPaginatedResponse(data.map(mapTmdbToMovie));
+      }
+    } catch (e) {
+      console.warn('Backend top_rated fetch failed. Falling back to local curated cache.', e);
+    }
     const topRated = [...CURATED_DB]
       .sort((a, b) => parseFloat(b.imdbRating) - parseFloat(a.imdbRating))
-      .map(mapOmdbToMovie);
+      .map(mapTmdbToMovie);
     return createPaginatedResponse(topRated);
   },
 
   // Now Playing Movies
   getNowPlaying: async (page = 1): Promise<PaginatedResponse<Movie>> => {
-    const nowPlaying = CURATED_DB.slice(0, 6).map(mapOmdbToMovie);
+    const nowPlaying = CURATED_DB.slice(0, 6).map(mapTmdbToMovie);
     return createPaginatedResponse(nowPlaying);
   },
 
   // Upcoming Movies
   getUpcoming: async (page = 1): Promise<PaginatedResponse<Movie>> => {
-    const upcoming = CURATED_DB.slice(6, 12).map(mapOmdbToMovie);
+    try {
+      const { data } = await apiClient.get<any[]>('/movies/upcoming');
+      if (data && data.length > 0) {
+        return createPaginatedResponse(data.map(mapTmdbToMovie));
+      }
+    } catch (e) {
+      console.warn('Backend upcoming fetch failed. Falling back to local curated cache.', e);
+    }
+    const upcoming = CURATED_DB.slice(6, 12).map(mapTmdbToMovie);
     return createPaginatedResponse(upcoming);
   },
 
-  // Movie Details Lookup by Number ID (used by screens/components)
+  // Movie Details Lookup by Number ID
   getMovieDetails: async (id: number): Promise<MovieDetails> => {
     const imdbId = numberToImdbId(id);
     
-    // First check curated database to avoid extra network requests
+    // Check curated database first
     const curated = CURATED_DB.find(m => m.imdbID === imdbId);
     if (curated) {
-      return mapOmdbToMovieDetails(curated);
+      return mapTmdbToMovieDetails(curated);
     }
 
     try {
-      const data = await cachedGet({ i: imdbId, plot: 'full' });
-      return mapOmdbToMovieDetails(data);
+      const { data } = await apiClient.get<any>(`/movies/details/${imdbId}`);
+      return mapTmdbToMovieDetails(data);
     } catch (error) {
-      console.warn(`OMDb details lookup failed for ${imdbId}. Serving custom fallback.`, error);
-      // Serve a fallback details screen
+      console.warn(`Backend details lookup failed for ${imdbId}. Serving custom fallback.`, error);
       const fallbackCurated = CURATED_DB[0];
-      return mapOmdbToMovieDetails({
+      return mapTmdbToMovieDetails({
         ...fallbackCurated,
         imdbID: imdbId,
         Title: `Movie Ref #${id}`,
@@ -667,56 +669,31 @@ export const omdbApi = {
   // Movie Details Lookup by IMDb ID String directly
   getMovieDetailsByImdbId: async (imdbId: string): Promise<MovieDetails> => {
     try {
-      const data = await cachedGet({ i: imdbId, plot: 'full' });
-      return mapOmdbToMovieDetails(data);
+      const { data } = await apiClient.get<any>(`/movies/details/${imdbId}`);
+      return mapTmdbToMovieDetails(data);
     } catch (error) {
       const id = imdbIdToNumber(imdbId);
-      return omdbApi.getMovieDetails(id);
+      return tmdbApi.getMovieDetails(id);
     }
   },
 
-  // Movie Search by name
+  // Movie Search by query
   searchMovies: async (query: string, page = 1): Promise<PaginatedResponse<Movie>> => {
     try {
-      const data = await cachedGet({ s: query, page, type: 'movie' });
-      
-      if (!data || data.Response === 'False' || !data.Search) {
-        const filtered = CURATED_DB.filter(m => m.Title.toLowerCase().includes(query.toLowerCase())).map(mapOmdbToMovie);
-        return createPaginatedResponse(filtered);
+      const { data } = await apiClient.get<any[]>('/movies/search', { params: { query } });
+      if (data && data.length > 0) {
+        return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
-
-
-      // Parallel detailing to get complete records (overview, votes, IMDb rating)
-      const results = await Promise.all(
-        data.Search.slice(0, 10).map(async (item: any) => {
-          try {
-            // First check cache/curated
-            const cachedDetails = apiCache.get(JSON.stringify({ i: item.imdbID, plot: 'full' }));
-            if (cachedDetails) return mapOmdbToMovie(cachedDetails);
-
-            const curatedItem = CURATED_DB.find(c => c.imdbID === item.imdbID);
-            if (curatedItem) return mapOmdbToMovie(curatedItem);
-
-            const details = await cachedGet({ i: item.imdbID, plot: 'full' });
-            return mapOmdbToMovie(details);
-          } catch {
-            return mapOmdbToMovie(item);
-          }
-        })
-      );
-
-      return createPaginatedResponse(results);
     } catch (error) {
-      console.error('OMDb search error:', error);
-      // Filter curated local list as fallback
-      const filtered = CURATED_DB.filter(m => m.Title.toLowerCase().includes(query.toLowerCase())).map(mapOmdbToMovie);
-      return createPaginatedResponse(filtered);
+      console.warn('Backend search query failed. Serving filtered offline database.', error);
     }
+    const filtered = CURATED_DB.filter(m => m.Title.toLowerCase().includes(query.toLowerCase())).map(mapTmdbToMovie);
+    return createPaginatedResponse(filtered);
   },
 
   // Multi Search fallback
   searchMulti: async (query: string, page = 1) => {
-    return omdbApi.searchMovies(query, page);
+    return tmdbApi.searchMovies(query, page);
   },
 
   // Genres List
@@ -724,7 +701,7 @@ export const omdbApi = {
     return { genres: GENRES_LIST };
   },
 
-  // Discover fallbacks using curated DB or queries
+  // Discover fallbacks
   discover: async (params: {
     with_genres?: string;
     sort_by?: string;
@@ -746,13 +723,13 @@ export const omdbApi = {
       list = list.filter(m => m.Year.includes(String(params.year)));
     }
 
-    return createPaginatedResponse(list.map(mapOmdbToMovie));
+    return createPaginatedResponse(list.map(mapTmdbToMovie));
   },
 
-  // TV Shows mappings (using curated database items mapped to TVShow)
+  // TV Shows mappings
   getTrendingTV: async (): Promise<PaginatedResponse<TVShow>> => {
     const list: TVShow[] = CURATED_DB.slice(3, 7).map(m => {
-      const movie = mapOmdbToMovie(m);
+      const movie = mapTmdbToMovie(m);
       return {
         id: movie.id,
         name: movie.title,
@@ -771,13 +748,13 @@ export const omdbApi = {
   },
 
   getPopularTV: async (): Promise<PaginatedResponse<TVShow>> => {
-    return omdbApi.getTrendingTV();
+    return tmdbApi.getTrendingTV();
   },
 
-  // Watch Providers (mocked cleanly as watch providers are not available in OMDb)
+  // Watch Providers (mocked cleanly)
   getWatchProviders: async (movieId: number, country = 'US') => {
     return {
-      link: 'https://www.imdb.com',
+      link: 'https://www.themoviedb.org',
       flatrate: [
         { provider_id: 8, provider_name: 'Netflix', logo_path: '' },
         { provider_id: 9, provider_name: 'Prime Video', logo_path: '' },
@@ -792,7 +769,7 @@ export const omdbApi = {
     if (curated) return curated.Rated || 'PG-13';
 
     try {
-      const data = await cachedGet({ i: imdbId });
+      const { data } = await apiClient.get<any>(`/movies/details/${imdbId}`);
       return data.Rated && data.Rated !== 'N/A' ? data.Rated : 'PG-13';
     } catch {
       return 'PG-13';
@@ -801,16 +778,14 @@ export const omdbApi = {
 
   // Get by Genre Filter
   getByGenre: async (genreId: number, page = 1): Promise<PaginatedResponse<Movie>> => {
-    const filtered = CURATED_DB.filter(m => getGenreIdsFromString(m.Genre).includes(genreId)).map(mapOmdbToMovie);
+    const filtered = CURATED_DB.filter(m => getGenreIdsFromString(m.Genre).includes(genreId)).map(mapTmdbToMovie);
     
-    // If we have few items, let's load more related by doing a generic genre keyword search!
     if (filtered.length < 5) {
       const genreName = GENRES_LIST.find(g => g.id === genreId)?.name || 'drama';
       try {
-        const data = await cachedGet({ s: genreName, page, type: 'movie' });
-        if (data && data.Search) {
-          const fetched = data.Search.slice(0, 10).map(mapOmdbToMovie);
-          const merged = [...filtered, ...fetched];
+        const data = await tmdbApi.searchMovies(genreName, page);
+        if (data && data.results) {
+          const merged = [...filtered, ...data.results];
           const unique = merged.filter((item, index, self) =>
             self.findIndex(t => t.id === item.id) === index
           );
@@ -844,13 +819,13 @@ export const omdbApi = {
 
     const filtered = CURATED_DB.filter(m =>
       keywordList.some(k => m.Genre.toLowerCase().includes(k))
-    ).map(mapOmdbToMovie);
+    ).map(mapTmdbToMovie);
 
     if (filtered.length > 0) {
       return createPaginatedResponse(filtered);
     }
-    return createPaginatedResponse(CURATED_DB.slice(0, 6).map(mapOmdbToMovie));
+    return createPaginatedResponse(CURATED_DB.slice(0, 6).map(mapTmdbToMovie));
   },
 };
 
-export default omdbApi;
+export default tmdbApi;

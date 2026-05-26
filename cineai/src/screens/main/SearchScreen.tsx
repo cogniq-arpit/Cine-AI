@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors, Radius, Motion, Spacing } from '../../constants/theme';
-import omdbApi from '../../services/omdbApi';
+import tmdbApi from '../../services/tmdbApi';
 import type { Movie, RootStackParamList } from '../../types';
 
 const { width: W } = Dimensions.get('window');
@@ -33,11 +33,8 @@ const GENRES = [
 ];
 
 const SearchResultCard: React.FC<{ movie: Movie; onPress: () => void }> = ({ movie, onPress }) => {
-  const poster = movie.poster_path
-    ? (movie.poster_path.startsWith('http')
-        ? movie.poster_path
-        : `https://img.omdbapi.com/?apikey=3be0d3d0&i=${movie.poster_path}&h=300`)
-    : null;
+  // poster_path from mapTmdbToMovie is always a full URL (Unsplash or TMDB CDN fallback)
+  const poster = movie.poster_path || null;
 
 
   return (
@@ -113,7 +110,7 @@ export const SearchScreen: React.FC = () => {
     debounceRef.current = setTimeout(async () => {
       setLoading(true);
       try {
-        const r = await omdbApi.searchMovies(q.trim());
+        const r = await tmdbApi.searchMovies(q.trim());
         setResults(r.results);
       } catch { setResults([]); }
       finally { setLoading(false); }

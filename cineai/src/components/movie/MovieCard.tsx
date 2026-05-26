@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants/theme';
 import { Movie } from '../../types';
-import { getPosterUrl, getBackdropUrl } from '../../services/omdbApi';
+import { getPosterUrl, getBackdropUrl } from '../../services/tmdbApi';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.42;

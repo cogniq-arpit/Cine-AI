@@ -1,8 +1,20 @@
 import axios, { InternalAxiosRequestConfig, AxiosResponse } from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 // In Expo SDK 54, process.env loads environment variables declared with EXPO_PUBLIC_
-const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000/api/v1';
+const getBaseURL = () => {
+  if (process.env.EXPO_PUBLIC_API_URL) {
+    return process.env.EXPO_PUBLIC_API_URL;
+  }
+  // Dynamic fallback based on platform
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:8000/api/v1';
+  }
+  return 'http://127.0.0.1:8000/api/v1';
+};
+
+const API_URL = getBaseURL();
 console.log('--- [DEBUG] Cine AI Frontend API Base URL:', API_URL);
 
 

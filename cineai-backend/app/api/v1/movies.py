@@ -18,17 +18,30 @@ from app.services.movie_metadata import movie_metadata_service
 
 router = APIRouter(tags=["Movies & Lists"])
 
+import logging
+logger = logging.getLogger("cineai-movies-router")
+
 @router.get("/trending", response_model=List[dict])
 async def get_trending_movies(db: AsyncSession = Depends(get_db)):
-    """Resolves trending movies dynamically by consolidating highest global interaction rates."""
+    """Resolves trending movies dynamically by consolidating highest global interaction rates or querying TMDB directly."""
+    try:
+        # 1. Try to fetch live trending movies from TMDB
+        trending = await movie_metadata_service.fetch_trending_movies()
+        if trending:
+            return trending
+    except Exception as e:
+        logger.error(f"Live TMDB trending fetch failed: {str(e)}")
+
     # Standard fallback trending movies list if database records are minimal
     fallback = [
-        {"imdbID": "tt1375666", "Title": "Inception", "Year": "2010", "Poster": "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=300"},
-        {"imdbID": "tt0816692", "Title": "Interstellar", "Year": "2014", "Poster": "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=300"},
-        {"imdbID": "tt1160419", "Title": "Dune", "Year": "2021", "Poster": "https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=300"},
-        {"imdbID": "tt2582802", "Title": "Whiplash", "Year": "2014", "Poster": "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?q=80&w=300"}
+        {"imdbID": "tt15398776", "Title": "Oppenheimer", "Year": "2023", "Poster": "https://image.tmdb.org/t/p/w500/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg", "Genre": "Biography, Drama, History", "Plot": "The story of J. Robert Oppenheimer and his role in the development of the atomic bomb.", "imdbRating": "8.9", "Director": "Christopher Nolan", "Actors": "Cillian Murphy, Emily Blunt"},
+        {"imdbID": "tt1375666", "Title": "Inception", "Year": "2010", "Poster": "https://image.tmdb.org/t/p/w500/edv5CZvWj09upOsy2Y6IwDhK8bt.jpg", "Genre": "Action, Adventure, Sci-Fi", "Plot": "A thief who steals corporate secrets through dream-sharing technology is given the task of planting an idea.", "imdbRating": "8.8", "Director": "Christopher Nolan", "Actors": "Leonardo DiCaprio, Joseph Gordon-Levitt"},
+        {"imdbID": "tt0816692", "Title": "Interstellar", "Year": "2014", "Poster": "https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg", "Genre": "Adventure, Drama, Sci-Fi", "Plot": "A team of explorers travel through a wormhole in space in an attempt to ensure humanity's survival.", "imdbRating": "8.7", "Director": "Christopher Nolan", "Actors": "Matthew McConaughey, Anne Hathaway"},
+        {"imdbID": "tt15239678", "Title": "Dune: Part Two", "Year": "2024", "Poster": "https://image.tmdb.org/t/p/w500/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg", "Genre": "Action, Adventure, Sci-Fi", "Plot": "Paul Atreides unites with Chani and the Fremen while seeking revenge.", "imdbRating": "9.0", "Director": "Denis Villeneuve", "Actors": "Timothée Chalamet, Zendaya"},
+        {"imdbID": "tt0111161", "Title": "The Shawshank Redemption", "Year": "1994", "Poster": "https://image.tmdb.org/t/p/w500/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg", "Genre": "Drama", "Plot": "Over the course of several years, two convicts form a friendship, seeking consolation and redemption.", "imdbRating": "9.3", "Director": "Frank Darabont", "Actors": "Tim Robbins, Morgan Freeman"},
+        {"imdbID": "tt0468569", "Title": "The Dark Knight", "Year": "2008", "Poster": "https://image.tmdb.org/t/p/w500/1hRoyzDtpgMU7Dz4JF22RANzQO7.jpg", "Genre": "Action, Crime, Drama", "Plot": "When the Joker wreaks havoc on Gotham, Batman must accept one of the greatest tests of his ability.", "imdbRating": "9.0", "Director": "Christopher Nolan", "Actors": "Christian Bale, Heath Ledger"}
     ]
-    
+
     try:
         # Group interaction counts by imdb_id to find global trending items
         query = (
@@ -46,7 +59,7 @@ async def get_trending_movies(db: AsyncSession = Depends(get_db)):
         trending_list = []
         for row in rows:
             imdb_id = row[0]
-            # Fetch metadata dynamically from OMDb
+            # Fetch metadata dynamically from TMDB
             details = await movie_metadata_service.fetch_by_imdb_id(imdb_id)
             if details:
                 trending_list.append({
@@ -63,13 +76,47 @@ async def get_trending_movies(db: AsyncSession = Depends(get_db)):
     except Exception:
         return fallback
 
+@router.get("/popular", response_model=List[dict])
+async def get_popular_movies():
+    """Fetches popular movies dynamically from TMDB."""
+    try:
+        popular = await movie_metadata_service.fetch_popular_movies()
+        if popular:
+            return popular
+    except Exception as e:
+        logger.error(f"Live TMDB popular fetch failed: {str(e)}")
+    return []
+
+@router.get("/upcoming", response_model=List[dict])
+async def get_upcoming_movies():
+    """Fetches upcoming movies dynamically from TMDB."""
+    try:
+        upcoming = await movie_metadata_service.fetch_upcoming_movies()
+        if upcoming:
+            return upcoming
+    except Exception as e:
+        logger.error(f"Live TMDB upcoming fetch failed: {str(e)}")
+    return []
+
+@router.get("/top_rated", response_model=List[dict])
+async def get_top_rated_movies():
+    """Fetches top-rated movies dynamically from TMDB."""
+    try:
+        top_rated = await movie_metadata_service.fetch_top_rated_movies()
+        if top_rated:
+            return top_rated
+    except Exception as e:
+        logger.error(f"Live TMDB top_rated fetch failed: {str(e)}")
+    return []
+
+
 @router.get("/details/{imdb_id}", response_model=MovieDetailResponse)
 async def get_movie_details(imdb_id: str, current_user: Optional[User] = Depends(get_optional_user), db: AsyncSession = Depends(get_db)):
-    """Fetches details from OMDb, appends records into RecentlyViewed logs, and records a trending interaction."""
+    """Fetches details from TMDB, appends records into RecentlyViewed logs, and records a trending interaction."""
     # 1. Fetch metadata
     details = await movie_metadata_service.fetch_by_imdb_id(imdb_id)
     if not details:
-        raise HTTPException(status_code=404, detail="Movie not found on OMDb API")
+        raise HTTPException(status_code=404, detail="Movie not found on TMDB API")
         
     # 2. Append recently viewed and save interaction if logged in
     if current_user:
@@ -92,7 +139,7 @@ async def get_movie_details(imdb_id: str, current_user: Optional[User] = Depends
 
 @router.get("/search", response_model=List[dict])
 async def search_movies(query: str):
-    """Searches movies securely via consolidated backend OMDb service."""
+    """Searches movies securely via consolidated backend TMDB service."""
     results = await movie_metadata_service.search_movies(query)
     return results
 

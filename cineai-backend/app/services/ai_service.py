@@ -9,11 +9,11 @@ logger = logging.getLogger("cineai-ai-service")
 class AIService:
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent"
+        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
 
     async def generate_chat_response(self, prompt: str, chat_context: List[Dict] = None) -> str:
         """Sends the user message alongside context to Google Gemma 4 to fetch conversational responses."""
-        if not self.api_key or self.api_key == "AIzaSyD_dummy_gemini_key":
+        if not self.api_key:
             return "Cine AI is operating in preview mode. Set a valid GEMINI_API_KEY in your env settings to experience real conversations."
 
 
@@ -34,7 +34,7 @@ class AIService:
             "  \"moodTags\": [\"emotional\", \"cinematic\", \"tag3\"]\n"
             "}\n\n"
             "Rules:\n"
-            "1. movieSearchQueries must be EXACT movie titles that exist in OMDb (real films only)\n"
+            "1. movieSearchQueries must be EXACT movie titles that exist in TMDB (real films only)\n"
             "2. Recommend 3–6 movies that precisely match the request\n"
             "3. Write engaging, emotionally intelligent messages — not generic lists\n"
             "4. For conversational messages (greetings, thanks, etc.) use empty arrays for queries and tags\n"
@@ -62,13 +62,9 @@ class AIService:
                 url = f"{self.base_url}?key={self.api_key}"
                 payload = {
                     "contents": formatted_contents,
-                    "tools": [{"googleSearch": {}}],
                     "generationConfig": {
                         "temperature": 0.8,
                         "maxOutputTokens": 600,
-                        "thinkingConfig": {
-                            "thinkingLevel": "HIGH"
-                        }
                     }
                 }
 
@@ -150,7 +146,7 @@ class AIService:
 
     async def generate_recommendations_list(self, mood_prompt: str) -> List[Dict]:
         """Leverages Gemini to extract a strictly structured JSON list of movie suggestions mapping to mood prompts."""
-        if not self.api_key or self.api_key == "AIzaSyD_dummy_gemini_key":
+        if not self.api_key:
             # Return dummy structure if api key is missing
             return [
                 {"Title": "Inception", "imdbID": "tt1375666", "Year": "2010", "Poster": "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=300"},

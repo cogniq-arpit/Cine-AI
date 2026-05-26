@@ -57,27 +57,28 @@ const PREVIEW_HIGHLIGHTS = [
     id: 1,
     title: 'Interstellar',
     match: 98,
-    poster: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
+    poster: 'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
     desc: 'Space Odyssey',
-    movieId: 157336
+    movieId: 816692
   },
   {
     id: 2,
     title: 'Dune: Part Two',
     match: 96,
-    poster: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500&auto=format&fit=crop&q=60',
+    poster: 'https://image.tmdb.org/t/p/w500/1pdfpwXt6tLY244TLHjRj24Zt6t.jpg',
     desc: 'Desert Epic',
-    movieId: 438631
+    movieId: 15239678
   },
   {
     id: 3,
-    title: 'Everything Everywhere',
+    title: 'The Dark Knight',
     match: 94,
-    poster: 'https://images.unsplash.com/photo-1500485035595-cbe6f645feb1?w=500&auto=format&fit=crop&q=60',
-    desc: 'Multiverse Chaos',
-    movieId: 545611
+    poster: 'https://image.tmdb.org/t/p/w500/qJ2tWw7512l29i1KjGo8qG71wCc.jpg',
+    desc: 'Gotham\'s Guardian',
+    movieId: 468569
   }
 ];
+
 
 // ─── Breathing Aura Rings for CineAI Orb ─────────────────────────────────────
 const PulseRing: React.FC<{ delay: number }> = ({ delay }) => {
@@ -162,11 +163,9 @@ const typingStyles = StyleSheet.create({
 
 // ─── Movie Recommendation Card (Optimized Height & Overlays) ─────────────────
 const MovieChip: React.FC<{ movie: Movie; reason?: string; onPress: () => void }> = ({ movie, reason, onPress }) => {
-  const poster = movie.poster_path
-    ? (movie.poster_path.startsWith('http')
-        ? movie.poster_path
-        : `https://img.omdbapi.com/?apikey=3be0d3d0&i=${movie.poster_path}&h=300`)
-    : null;
+  // poster_path from mapTmdbToMovie is always a full URL (Unsplash or TMDB CDN fallback)
+  const poster = movie.poster_path || null;
+
 
   const matchPct = Math.floor(Math.random() * 8 + 91);
 
@@ -457,8 +456,16 @@ export const AIChatScreen: React.FC = () => {
   }));
 
   useEffect(() => {
-    loadSessions();
-    if (!currentSession) createSession();
+    const initializeChat = async () => {
+      await loadSessions();
+      const loadedSessions = useChatStore.getState().sessions;
+      if (loadedSessions.length === 0) {
+        await createSession();
+      } else {
+        await loadSession(loadedSessions[0].id);
+      }
+    };
+    initializeChat();
   }, []);
 
   useEffect(() => {

@@ -8,7 +8,7 @@ Cine AI is a startup-grade, luxury-class mobile-first application designed for f
 
 *   **🎙️ Tactile AI Voice Assistant:** Speak naturally to Cine AI. Enjoy high-fidelity haptic feedback, real-time animated sound waves, and a luxury-tier fallback dictation dialog allowing direct access to native mobile keyboard speech.
 *   **💊 Smooth Chip Prompt Carousels:** Ditch rigid desktop grids. Utilize a beautiful, horizontally scrollable filter chip pill slider for rapid cinematic prompts (e.g., "Mind-bending Sci-Fi", "Tear-Jerker Dramas") that adapt dynamically on any screen.
-*   **📈 Dynamic Popularity Analytics:** Real-time trending feeds. Every user click and viewing is grouped, aggregated, and ranked on the FastAPI backend, fetching live OMDb rich metadata and falling back to robust seeds.
+*   **📈 Dynamic Popularity Analytics:** Real-time trending feeds. Every user click and viewing is grouped, aggregated, and ranked on the FastAPI backend, fetching live TMDB rich metadata and falling back to robust seeds.
 *   **🔐 Luxury Glassmorphism & Haptics:** Polished dark mode layout utilizing Outfit and Inter custom typography, subtle micro-animations (via Reanimated), and rich visual recommendation cards.
 
 ---
@@ -22,7 +22,7 @@ graph TD
     
     B -->|Asynchronous SQL Alchemy| D[(🗄️ Supabase PostgreSQL Cloud DB)]
     B -->|JSON Rest API| E[🧠 Google Gemini 1.5 Flash API]
-    B -->|Search Queries| F[🎬 OMDb Metadata API]
+    B -->|Search Queries| F[🎬 TMDB Metadata API]
 
     style A fill:#e50914,stroke:#fff,stroke-width:2px,color:#fff
     style B fill:#1db954,stroke:#fff,stroke-width:2px,color:#fff
@@ -66,7 +66,8 @@ graph TD
    ```ini
    DATABASE_URL=postgresql+asyncpg://postgres.[YOUR-REF]:[YOUR-PASSWORD]@aws-0-[REGION].pooler.supabase.com:6543/postgres
    GEMINI_API_KEY=your_gemini_api_key_here
-   OMDB_API_KEY=your_omdb_api_key_here
+   TMDB_API_KEY=your_tmdb_api_key_here
+   TMDB_BEARER_TOKEN=your_tmdb_bearer_token_here (optional fallback)
    JWT_SECRET=your_jwt_signing_key_here
    ```
 4. Boot the server:

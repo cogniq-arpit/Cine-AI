@@ -30,11 +30,8 @@ const WatchlistCard: React.FC<{
   const scale = useSharedValue(1);
   const cardStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
   const movie = item.movie_data;
-  const poster = movie.poster_path
-    ? (movie.poster_path.startsWith('http')
-        ? movie.poster_path
-        : `https://img.omdbapi.com/?apikey=3be0d3d0&i=${movie.poster_path}&h=300`)
-    : null;
+  // poster_path from mapTmdbToMovie is always a full URL (Unsplash or TMDB CDN fallback)
+  const poster = movie.poster_path || null;
 
 
   return (

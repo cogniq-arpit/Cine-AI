@@ -30,7 +30,7 @@ cineai-backend/
 │   ├── models/                 # SQLAlchemy schemas (9 Models)
 │   ├── schemas/                # Pydantic validation (DTOs)
 │   ├── api/                    # Routers & Protected bounds (V1 Router)
-│   └── services/               # Gemini AI & OMDb API services
+│   └── services/               # Gemini AI & TMDB API services
 ├── Dockerfile                  # Container instructions
 ├── requirements.txt            # Package listings
 └── .env.example                # Local configuration template

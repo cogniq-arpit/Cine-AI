@@ -50,6 +50,7 @@ interface FloatingInputProps {
   returnKeyType?: TextInput['props']['returnKeyType'];
   onSubmitEditing?: () => void;
   blurOnSubmit?: boolean;
+  inputRef?: React.RefObject<TextInput | null>;
 }
 
 const FloatingInput: React.FC<FloatingInputProps> = ({
@@ -63,6 +64,7 @@ const FloatingInput: React.FC<FloatingInputProps> = ({
   returnKeyType,
   onSubmitEditing,
   blurOnSubmit,
+  inputRef,
 }) => {
   const [isFocused, setIsFocused] = useState(false);
   const [isVisible, setIsVisible] = useState(!secureTextEntry);
@@ -125,6 +127,7 @@ const FloatingInput: React.FC<FloatingInputProps> = ({
             {label}
           </Animated.Text>
           <TextInput
+            ref={inputRef}
             style={inputStyles.input}
             value={value}
             onChangeText={onChangeText}
@@ -330,6 +333,7 @@ export const LoginScreen: React.FC = () => {
             secureTextEntry
             returnKeyType="done"
             onSubmitEditing={handleSignIn}
+            inputRef={passwordRef}
           />
 
           {/* Forgot password */}
