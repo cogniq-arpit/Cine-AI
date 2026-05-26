@@ -77,13 +77,19 @@ class AIService:
                     result = response.json()
                     candidates = result.get("candidates", [])
                     if candidates:
-                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        non_thought_parts = [p.get("text", "") for p in parts if not p.get("thought")]
+                        text = "".join(non_thought_parts).strip()
+                        if not text and parts:
+                            text = parts[0].get("text", "").strip()
+                            
                         # Clean markdown json formatting wrapper if generated
                         if text.startswith("```json"):
                             text = text[7:]
                         if text.endswith("```"):
                             text = text[:-3]
                         return text.strip()
+
                 logger.error(f"Gemini API returned code {response.status_code}: {response.text}")
                 return self._generate_local_cinematic_fallback(prompt)
             except Exception as e:
@@ -179,13 +185,19 @@ class AIService:
                     result = response.json()
                     candidates = result.get("candidates", [])
                     if candidates:
-                        text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "").strip()
+                        parts = candidates[0].get("content", {}).get("parts", [])
+                        non_thought_parts = [p.get("text", "") for p in parts if not p.get("thought")]
+                        text = "".join(non_thought_parts).strip()
+                        if not text and parts:
+                            text = parts[0].get("text", "").strip()
+                            
                         # Clean markdown json formatting wrapper if generated
                         if text.startswith("```json"):
                             text = text[7:]
                         if text.endswith("```"):
                             text = text[:-3]
                         text = text.strip()
+
                         
                         movie_list = json.loads(text)
                         if isinstance(movie_list, list):
