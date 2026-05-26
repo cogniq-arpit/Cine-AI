@@ -3,7 +3,7 @@ import json
 import traceback
 
 def test_gemma_api():
-    api_key = "AIzaSyDXy6VzKcCL92UtN2QyYYxGvDRbd4RXkoc"
+    api_key = "AIzaSyDVZclwVZn0kKdUd2Ye7-d8xewtY76cBXg"
     base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent"
     
     url = f"{base_url}?key={api_key}"
