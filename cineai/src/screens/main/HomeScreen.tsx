@@ -286,7 +286,7 @@ const CURATED: Movie[] = [
     adult: false,
     video: false,
   },
-];;
+];
 
 const MOOD_CATEGORIES = [
   { id: 'dark', label: 'Dark & Tense', color: '#1A1A2E', accent: Colors.accent.crimson },

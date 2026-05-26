@@ -39,10 +39,10 @@ const MOCK_SPEECH_PHRASES = [
 
 const QUICK_MOOD_PILLS = [
   { id: 'noir', label: 'Neo-Noir', icon: 'moon-outline' },
-  { id: 'cyber', label: 'Cyberpunk', icon: 'terminal-outline' },
+  { id: 'cyber', label: 'Cyberpunk', icon: 'hardware-chip-outline' },
   { id: 'oscar', label: 'Oscar Gold', icon: 'trophy-outline' },
   { id: 'indie', label: 'Indie Gems', icon: 'film-outline' },
-  { id: 'mind', label: 'Mind-Bend', icon: 'intellectual-outline' },
+  { id: 'mind', label: 'Mind-Bend', icon: 'bulb-outline' },
 ];
 
 const SUGGESTION_CHIPS = [
