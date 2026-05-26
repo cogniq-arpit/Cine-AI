@@ -3,6 +3,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // In Expo SDK 54, process.env loads environment variables declared with EXPO_PUBLIC_
 const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8000/api/v1';
+console.log('--- [DEBUG] Cine AI Frontend API Base URL:', API_URL);
+
 
 export const apiClient = axios.create({
   baseURL: API_URL,
