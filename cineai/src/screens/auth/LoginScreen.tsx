@@ -1,391 +1,385 @@
+/**
+ * CineAI V3 — LoginScreen
+ * Premium glass-card auth experience with floating labels.
+ */
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   ScrollView,
+  Pressable,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
-  TextInput,
-  Alert,
   Dimensions,
+  TextInput,
+  ActivityIndicator,
+  StatusBar,
 } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withDelay,
   withSpring,
-  withSequence,
-  withRepeat,
+  withDelay,
+  interpolate,
+  Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { BlurView } from 'expo-blur';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants/theme';
+import { Colors, Typography, Spacing, Radius, Motion } from '../../constants/theme';
 import { useAuthStore } from '../../store/authStore';
 import type { AuthStackParamList } from '../../types';
 
-const { width, height } = Dimensions.get('window');
+const { width: W, height: H } = Dimensions.get('window');
 type LoginNav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
-// Premium animated input field
-interface PremiumInputProps {
-  icon: string;
-  placeholder: string;
+// ─── Floating Label Input ──────────────────────────────────────────────────
+interface FloatingInputProps {
+  label: string;
   value: string;
-  onChangeText: (v: string) => void;
-  isPassword?: boolean;
-  keyboardType?: any;
-  autoCapitalize?: any;
-  autoComplete?: any;
-  error?: string;
+  onChangeText: (t: string) => void;
+  icon: React.ComponentProps<typeof Ionicons>['name'];
+  secureTextEntry?: boolean;
+  keyboardType?: TextInput['props']['keyboardType'];
+  autoCapitalize?: TextInput['props']['autoCapitalize'];
+  returnKeyType?: TextInput['props']['returnKeyType'];
+  onSubmitEditing?: () => void;
+  blurOnSubmit?: boolean;
 }
 
-const PremiumInput: React.FC<PremiumInputProps> = ({
-  icon,
-  placeholder,
+const FloatingInput: React.FC<FloatingInputProps> = ({
+  label,
   value,
   onChangeText,
-  isPassword = false,
+  icon,
+  secureTextEntry,
   keyboardType = 'default',
   autoCapitalize = 'none',
-  autoComplete,
-  error,
+  returnKeyType,
+  onSubmitEditing,
+  blurOnSubmit,
 }) => {
-  const [focused, setFocused] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
-
-  const borderColor = useSharedValue(0);
-  const labelOpacity = useSharedValue(value ? 1 : 0);
-  const labelY = useSharedValue(value ? 0 : 10);
-
-  const borderStyle = useAnimatedStyle(() => ({
-    borderColor: `rgba(230, 57, 70, ${borderColor.value})`,
-    borderWidth: 1 + borderColor.value,
-  }));
+  const [isFocused, setIsFocused] = useState(false);
+  const [isVisible, setIsVisible] = useState(!secureTextEntry);
+  const labelAnim = useSharedValue(value ? 1 : 0);
+  const borderAnim = useSharedValue(0);
+  const glowAnim = useSharedValue(0);
 
   const labelStyle = useAnimatedStyle(() => ({
-    opacity: labelOpacity.value,
-    transform: [{ translateY: labelY.value }],
+    transform: [
+      { translateY: interpolate(labelAnim.value, [0, 1], [0, -26]) },
+      { scale: interpolate(labelAnim.value, [0, 1], [1, 0.82]) },
+    ],
+    color: isFocused ? Colors.accent.crimson : Colors.text.tertiary,
   }));
 
-  const onFocus = () => {
-    setFocused(true);
-    borderColor.value = withTiming(0.8, { duration: 200 });
-    labelOpacity.value = withTiming(1, { duration: 200 });
-    labelY.value = withSpring(0, { damping: 12 });
+  const borderStyle = useAnimatedStyle(() => ({
+    borderColor: `rgba(230,57,70,${borderAnim.value})`,
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: glowAnim.value,
+  }));
+
+  const handleFocus = () => {
+    setIsFocused(true);
+    labelAnim.value = withSpring(1, Motion.springs.gentle);
+    borderAnim.value = withTiming(0.7, { duration: 200 });
+    glowAnim.value = withTiming(1, { duration: 200 });
   };
 
-  const onBlur = () => {
-    setFocused(false);
-    borderColor.value = withTiming(0, { duration: 200 });
-    if (!value) {
-      labelOpacity.value = withTiming(0, { duration: 200 });
-      labelY.value = withTiming(10, { duration: 200 });
-    }
+  const handleBlur = () => {
+    setIsFocused(false);
+    if (!value) labelAnim.value = withSpring(0, Motion.springs.gentle);
+    borderAnim.value = withTiming(0, { duration: 200 });
+    glowAnim.value = withTiming(0, { duration: 200 });
   };
+
+  useEffect(() => {
+    if (value) labelAnim.value = withSpring(1, Motion.springs.gentle);
+  }, [value]);
 
   return (
-    <View style={{ marginBottom: error ? Spacing.xs : Spacing.base }}>
-      <Animated.View style={[inputStyles.container, borderStyle, error && inputStyles.errorBorder]}>
-        <View style={inputStyles.iconContainer}>
-          <Ionicons name={icon as any} size={18} color={focused ? Colors.primary : Colors.textMuted} />
-        </View>
-        <View style={{ flex: 1 }}>
-          {value ? (
-            <Animated.Text style={[inputStyles.floatingLabel, labelStyle]}>
-              {placeholder}
-            </Animated.Text>
-          ) : null}
+    <View style={inputStyles.wrapper}>
+      {/* Glow effect */}
+      <Animated.View style={[inputStyles.glow, glowStyle]} />
+
+      {/* Main container */}
+      <Animated.View style={[inputStyles.container, borderStyle]}>
+        {/* Icon */}
+        <Ionicons
+          name={icon}
+          size={18}
+          color={isFocused ? Colors.accent.crimson : Colors.text.tertiary}
+          style={inputStyles.icon}
+        />
+
+        {/* Float label */}
+        <View style={inputStyles.inputArea}>
+          <Animated.Text style={[inputStyles.label, labelStyle]} allowFontScaling={false}>
+            {label}
+          </Animated.Text>
           <TextInput
-            style={[inputStyles.input, value && inputStyles.inputWithLabel]}
-            placeholder={value ? '' : placeholder}
-            placeholderTextColor={Colors.textMuted}
+            style={inputStyles.input}
             value={value}
             onChangeText={onChangeText}
-            secureTextEntry={isPassword && !showPassword}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            secureTextEntry={secureTextEntry && !isVisible}
             keyboardType={keyboardType}
             autoCapitalize={autoCapitalize}
-            autoComplete={autoComplete}
-            onFocus={onFocus}
-            onBlur={onBlur}
+            returnKeyType={returnKeyType}
+            onSubmitEditing={onSubmitEditing}
+            blurOnSubmit={blurOnSubmit}
+            placeholderTextColor="transparent"
+            selectionColor={Colors.accent.crimson}
+            cursorColor={Colors.accent.crimson}
+            allowFontScaling={false}
           />
         </View>
-        {isPassword && (
-          <Pressable onPress={() => setShowPassword(!showPassword)} style={inputStyles.eyeBtn} hitSlop={8}>
+
+        {/* Visibility toggle */}
+        {secureTextEntry && (
+          <Pressable onPress={() => setIsVisible(v => !v)} style={inputStyles.visBtn}>
             <Ionicons
-              name={showPassword ? 'eye-outline' : 'eye-off-outline'}
+              name={isVisible ? 'eye-outline' : 'eye-off-outline'}
               size={18}
-              color={Colors.textMuted}
+              color={Colors.text.tertiary}
             />
           </Pressable>
         )}
       </Animated.View>
-      {error ? (
-        <View style={inputStyles.errorRow}>
-          <Ionicons name="alert-circle-outline" size={12} color={Colors.error} />
-          <Text style={inputStyles.errorText}>{error}</Text>
-        </View>
-      ) : null}
     </View>
   );
 };
 
 const inputStyles = StyleSheet.create({
+  wrapper: {
+    marginBottom: 20,
+    position: 'relative',
+  },
+  glow: {
+    position: 'absolute',
+    inset: -4,
+    borderRadius: Radius.lg + 4,
+    backgroundColor: Colors.accent.crimsonGlow,
+    opacity: 0,
+  },
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.04)',
-    borderRadius: Radius.md,
+    backgroundColor: Colors.glass.subtle,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: Colors.border,
-    minHeight: 56,
-    paddingHorizontal: Spacing.md,
+    borderColor: Colors.glass.border,
+    paddingHorizontal: 16,
+    paddingVertical: 16,
+    minHeight: 60,
+    position: 'relative',
     overflow: 'hidden',
   },
-  errorBorder: {
-    borderColor: Colors.error,
+  icon: {
+    marginRight: 12,
+    marginTop: 4,
   },
-  iconContainer: {
-    width: 32,
-    alignItems: 'center',
-    marginRight: Spacing.sm,
+  inputArea: {
+    flex: 1,
+    justifyContent: 'center',
+    position: 'relative',
+    minHeight: 36,
   },
-  floatingLabel: {
-    color: Colors.primary,
-    fontSize: Typography.xs,
-    fontFamily: 'Inter_500Medium',
-    marginBottom: 1,
+  label: {
+    position: 'absolute',
+    top: 8,
+    left: 0,
+    fontSize: 14,
+    fontFamily: 'Inter_400Regular',
+    transformOrigin: 'left center',
   },
   input: {
-    color: Colors.textPrimary,
-    fontSize: Typography.base,
+    fontSize: 15,
     fontFamily: 'Inter_400Regular',
-    paddingVertical: 0,
-    flex: 1,
-    height: 56,
+    color: Colors.text.primary,
+    paddingTop: 14,
+    paddingBottom: 0,
   },
-  inputWithLabel: {
-    height: 38,
-  },
-  eyeBtn: {
-    padding: Spacing.xs,
-  },
-  errorRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 4,
-    marginLeft: Spacing.sm,
-  },
-  errorText: {
-    color: Colors.error,
-    fontSize: Typography.xs,
-    fontFamily: 'Inter_500Medium',
+  visBtn: {
+    padding: 4,
   },
 });
 
-// Shake animation for invalid login
-const useShakeAnimation = () => {
-  const shakeX = useSharedValue(0);
-
-  const shake = () => {
-    shakeX.value = withSequence(
-      withTiming(12, { duration: 60 }),
-      withTiming(-12, { duration: 60 }),
-      withTiming(10, { duration: 60 }),
-      withTiming(-10, { duration: 60 }),
-      withTiming(6, { duration: 60 }),
-      withTiming(-6, { duration: 60 }),
-      withTiming(0, { duration: 60 }),
-    );
-  };
-
-  const style = useAnimatedStyle(() => ({
-    transform: [{ translateX: shakeX.value }],
-  }));
-
-  return { shake, style };
-};
-
+// ─── Main Login Screen ─────────────────────────────────────────────────────
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<LoginNav>();
   const { signIn, isLoading } = useAuthStore();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
-  const [errors, setErrors] = useState<{ identifier?: string; password?: string }>({});
-
-  const { shake, style: shakeStyle } = useShakeAnimation();
+  const [error, setError] = useState('');
+  const passwordRef = useRef<TextInput>(null);
 
   // Entrance animations
-  const contentOpacity = useSharedValue(0);
-  const contentY = useSharedValue(30);
+  const cardY = useSharedValue(40);
+  const cardOpacity = useSharedValue(0);
+  const backdropOpacity = useSharedValue(0);
+
+  const cardStyle = useAnimatedStyle(() => ({
+    opacity: cardOpacity.value,
+    transform: [{ translateY: cardY.value }],
+  }));
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
 
   useEffect(() => {
-    contentOpacity.value = withDelay(100, withTiming(1, { duration: 500 }));
-    contentY.value = withDelay(100, withSpring(0, { damping: 16 }));
+    backdropOpacity.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.cubic) });
+    cardOpacity.value = withDelay(300, withTiming(1, { duration: 600 }));
+    cardY.value = withDelay(300, withSpring(0, Motion.springs.gentle));
   }, []);
 
-  const contentStyle = useAnimatedStyle(() => ({
-    opacity: contentOpacity.value,
-    transform: [{ translateY: contentY.value }],
-  }));
-
-  const validate = () => {
-    const newErrors: typeof errors = {};
-    if (!identifier.trim()) newErrors.identifier = 'Username or Email is required';
-    if (!password) newErrors.password = 'Password is required';
-    else if (password.length < 6) newErrors.password = 'Password must be at least 6 characters';
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
-  };
-
   const handleSignIn = async () => {
-    if (!validate()) {
-      shake();
+    if (!identifier.trim() || !password) {
+      setError('Please fill in all fields');
       return;
     }
+    setError('');
     try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       await signIn(identifier.trim(), password);
-    } catch (err: any) {
-      shake();
-      const message = err.response?.data?.detail || 'Invalid credentials. Please try again.';
-      Alert.alert('Sign In Failed', message);
+    } catch (e: any) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
+      setError(e?.response?.data?.detail || 'Invalid credentials. Please try again.');
     }
   };
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      {/* Background */}
-      <LinearGradient
-        colors={[Colors.background, '#0C0C14']}
-        style={StyleSheet.absoluteFill}
-      />
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Ambient glow */}
-      <View style={styles.glowTop} />
-      <View style={styles.glowBottom} />
+      {/* Cinematic background */}
+      <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
+        <Image
+          source={{ uri: 'https://image.tmdb.org/t/p/w780/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg' }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+        />
+        <LinearGradient
+          colors={['rgba(7,7,9,0.5)', 'rgba(7,7,9,0.75)', Colors.bg.void]}
+          locations={[0, 0.4, 0.85]}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+
+      {/* Back button */}
+      <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
+        <View style={styles.backPill}>
+          <Ionicons name="chevron-back" size={18} color={Colors.text.primary} />
+        </View>
+      </Pressable>
 
       <ScrollView
-        contentContainerStyle={styles.scroll}
+        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
       >
-        {/* Back */}
-        <Pressable onPress={() => navigation.goBack()} hitSlop={15} style={styles.backBtn}>
-          <View style={styles.backBtnInner}>
-            <Ionicons name="arrow-back" size={18} color={Colors.textSecondary} />
-            <Text style={styles.backText}>Back</Text>
-          </View>
-        </Pressable>
-
-        <Animated.View style={contentStyle}>
+        <Animated.View style={[styles.card, cardStyle]}>
           {/* Header */}
-          <View style={styles.header}>
-            <View style={styles.logoRow}>
-              <LinearGradient
-                colors={[Colors.primary, Colors.primaryDark]}
-                style={styles.logoIcon}
-              >
-                <Ionicons name="film" size={14} color="#fff" />
-              </LinearGradient>
-              <Text style={styles.logoText}>
-                <Text style={styles.logoC}>C</Text>INE AI
-              </Text>
+          <View style={styles.cardHeader}>
+            <View style={styles.wordmarkSmall}>
+              <Text style={styles.wordmarkCine} allowFontScaling={false}>CINE</Text>
+              <View style={styles.aiPillSmall}>
+                <Text style={styles.wordmarkAI} allowFontScaling={false}>AI</Text>
+              </View>
             </View>
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>Sign in to continue your cinematic journey</Text>
+            <Text style={styles.title} allowFontScaling={false}>Welcome back</Text>
+            <Text style={styles.subtitle} allowFontScaling={false}>
+              Sign in to continue your cinematic journey
+            </Text>
           </View>
 
-          {/* Form Glass Card */}
-          <Animated.View style={[styles.formCard, shakeStyle]}>
-            <BlurView intensity={20} style={styles.formCardBlur} tint="dark">
-              <View style={styles.formCardBorder} />
-              <View style={styles.formCardContent}>
-                <PremiumInput
-                  icon="person-outline"
-                  placeholder="Username or Email"
-                  value={identifier}
-                  onChangeText={setIdentifier}
-                  error={errors.identifier}
-                  autoComplete="username"
-                />
-                <PremiumInput
-                  icon="lock-closed-outline"
-                  placeholder="Password"
-                  value={password}
-                  onChangeText={setPassword}
-                  isPassword
-                  error={errors.password}
-                  autoComplete="password"
-                />
+          {/* Error */}
+          {!!error && (
+            <View style={styles.errorBox}>
+              <Ionicons name="alert-circle-outline" size={16} color={Colors.semantic.error} />
+              <Text style={styles.errorText} allowFontScaling={false}>{error}</Text>
+            </View>
+          )}
 
-                {/* Forgot password */}
-                <Pressable
-                  onPress={() => navigation.navigate('ForgotPassword')}
-                  hitSlop={12}
-                  style={styles.forgotBtn}
-                >
-                  <Text style={styles.forgotText}>Forgot password?</Text>
-                </Pressable>
+          {/* Inputs */}
+          <FloatingInput
+            label="Email or Username"
+            value={identifier}
+            onChangeText={setIdentifier}
+            icon="person-outline"
+            keyboardType="email-address"
+            returnKeyType="next"
+            onSubmitEditing={() => passwordRef.current?.focus()}
+            blurOnSubmit={false}
+          />
+          <FloatingInput
+            label="Password"
+            value={password}
+            onChangeText={setPassword}
+            icon="lock-closed-outline"
+            secureTextEntry
+            returnKeyType="done"
+            onSubmitEditing={handleSignIn}
+          />
 
-                {/* Sign In Button */}
-                <Pressable
-                  onPress={handleSignIn}
-                  disabled={isLoading}
-                  style={({ pressed }) => [styles.signInBtn, pressed && { opacity: 0.9 }, isLoading && { opacity: 0.7 }]}
-                >
-                  <LinearGradient
-                    colors={[Colors.primary, Colors.primaryDark]}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 0 }}
-                    style={styles.signInBtnGradient}
-                  >
-                    {isLoading ? (
-                      <Text style={styles.signInBtnText}>Signing in...</Text>
-                    ) : (
-                      <>
-                        <Text style={styles.signInBtnText}>Sign In</Text>
-                        <Ionicons name="arrow-forward" size={18} color="#fff" />
-                      </>
-                    )}
-                  </LinearGradient>
-                </Pressable>
-              </View>
-            </BlurView>
-          </Animated.View>
+          {/* Forgot password */}
+          <Pressable
+            style={styles.forgotBtn}
+            onPress={() => navigation.navigate('ForgotPassword')}
+          >
+            <Text style={styles.forgotText} allowFontScaling={false}>
+              Forgot password?
+            </Text>
+          </Pressable>
+
+          {/* Sign In Button */}
+          <Pressable
+            onPress={handleSignIn}
+            disabled={isLoading}
+            style={({ pressed }) => [styles.signInBtn, pressed && styles.btnPressed]}
+          >
+            <LinearGradient
+              colors={[Colors.accent.crimsonLight, Colors.accent.crimson]}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 0 }}
+              style={styles.btnGradient}
+            >
+              {isLoading ? (
+                <ActivityIndicator size="small" color={Colors.text.onAccent} />
+              ) : (
+                <Text style={styles.signInText} allowFontScaling={false}>Sign In</Text>
+              )}
+            </LinearGradient>
+          </Pressable>
 
           {/* Divider */}
           <View style={styles.dividerRow}>
-            <View style={styles.divider} />
-            <Text style={styles.dividerText}>or</Text>
-            <View style={styles.divider} />
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText} allowFontScaling={false}>or</Text>
+            <View style={styles.dividerLine} />
           </View>
 
-          {/* Sign Up */}
-          <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
-            <Pressable onPress={() => navigation.navigate('SignUp')}>
-              <Text style={styles.linkText}>Create one free</Text>
-            </Pressable>
-          </View>
-
-          {/* Guest */}
+          {/* Sign up link */}
           <Pressable
-            onPress={() => useAuthStore.getState().signInAsGuest()}
-            hitSlop={15}
-            style={styles.guestBtn}
+            style={styles.signupRow}
+            onPress={() => navigation.navigate('SignUp')}
           >
-            <Ionicons name="eye-outline" size={14} color={Colors.textMuted} />
-            <Text style={styles.guestText}>Continue as Guest</Text>
+            <Text style={styles.signupPrompt} allowFontScaling={false}>
+              Don't have an account?{' '}
+            </Text>
+            <Text style={styles.signupLink} allowFontScaling={false}>
+              Create one
+            </Text>
           </Pressable>
         </Animated.View>
       </ScrollView>
@@ -394,179 +388,168 @@ export const LoginScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  glowTop: {
-    position: 'absolute',
-    top: -100,
-    left: width * 0.3,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: 'rgba(108,99,255,0.06)',
+  root: {
+    flex: 1,
+    backgroundColor: Colors.bg.void,
   },
-  glowBottom: {
-    position: 'absolute',
-    bottom: height * 0.2,
-    right: -80,
-    width: 280,
-    height: 280,
-    borderRadius: 140,
-    backgroundColor: 'rgba(230,57,70,0.07)',
-  },
-  scroll: {
+  scrollContent: {
     flexGrow: 1,
-    paddingHorizontal: Spacing.xl,
-    paddingTop: 60,
+    justifyContent: 'flex-end',
+    paddingHorizontal: 20,
     paddingBottom: 40,
+    paddingTop: 100,
   },
-  backBtn: { marginBottom: Spacing.xl },
-  backBtnInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    alignSelf: 'flex-start',
-    backgroundColor: 'rgba(255,255,255,0.06)',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
+  backBtn: {
+    position: 'absolute',
+    top: 56,
+    left: 20,
+    zIndex: 10,
+  },
+  backPill: {
+    backgroundColor: Colors.glass.medium,
     borderRadius: Radius.full,
-  },
-  backText: {
-    color: Colors.textSecondary,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_500Medium',
-  },
-  header: { marginBottom: Spacing['2xl'] },
-  logoRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.xl,
-  },
-  logoIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 40,
+    height: 40,
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
   },
-  logoText: {
-    fontSize: Typography.lg,
+  card: {
+    backgroundColor: 'rgba(13,13,18,0.85)',
+    borderRadius: Radius['2xl'],
+    borderWidth: 1,
+    borderColor: Colors.glass.border,
+    padding: 28,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 20 },
+    shadowOpacity: 0.5,
+    shadowRadius: 40,
+    elevation: 20,
+  },
+  cardHeader: {
+    marginBottom: 28,
+  },
+  wordmarkSmall: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 20,
+  },
+  wordmarkCine: {
+    fontSize: 18,
     fontFamily: 'Poppins_700Bold',
-    color: Colors.textPrimary,
+    color: Colors.text.primary,
+    letterSpacing: 2,
+  },
+  aiPillSmall: {
+    backgroundColor: Colors.accent.crimson,
+    borderRadius: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+  },
+  wordmarkAI: {
+    fontSize: 10,
+    fontFamily: 'Poppins_700Bold',
+    color: Colors.text.onAccent,
     letterSpacing: 1,
   },
-  logoC: { color: Colors.primary },
   title: {
-    fontSize: Typography['4xl'],
+    fontSize: 28,
     fontFamily: 'Poppins_700Bold',
-    color: Colors.textPrimary,
+    color: Colors.text.primary,
+    marginBottom: 8,
     letterSpacing: -0.5,
-    marginBottom: Spacing.xs,
   },
   subtitle: {
-    fontSize: Typography.base,
+    fontSize: 14,
     fontFamily: 'Inter_400Regular',
-    color: Colors.textSecondary,
-    lineHeight: Typography.base * 1.5,
+    color: Colors.text.secondary,
+    lineHeight: 20,
   },
-  formCard: {
-    borderRadius: Radius.xl,
-    overflow: 'hidden',
-    marginBottom: Spacing.xl,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 16 },
-    shadowOpacity: 0.4,
-    shadowRadius: 32,
-    elevation: 12,
-  },
-  formCardBlur: {
-    borderRadius: Radius.xl,
-    overflow: 'hidden',
-  },
-  formCardBorder: {
-    ...StyleSheet.absoluteFillObject,
-    borderRadius: Radius.xl,
+  errorBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: Colors.semantic.errorMuted,
+    borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: `${Colors.semantic.error}33`,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 16,
   },
-  formCardContent: {
-    padding: Spacing.xl,
-    backgroundColor: 'rgba(15,15,25,0.5)',
+  errorText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.semantic.error,
   },
   forgotBtn: {
     alignSelf: 'flex-end',
-    marginBottom: Spacing.lg,
-    marginTop: -Spacing.xs,
+    marginTop: -8,
+    marginBottom: 24,
+    paddingVertical: 4,
   },
   forgotText: {
-    color: Colors.textSecondary,
-    fontSize: Typography.xs,
+    fontSize: 13,
     fontFamily: 'Inter_500Medium',
+    color: Colors.accent.crimson,
   },
   signInBtn: {
     borderRadius: Radius.lg,
     overflow: 'hidden',
-    shadowColor: Colors.primary,
+    shadowColor: Colors.accent.crimson,
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.4,
     shadowRadius: 16,
     elevation: 8,
+    marginBottom: 24,
   },
-  signInBtnGradient: {
-    flexDirection: 'row',
+  btnGradient: {
+    paddingVertical: 18,
     alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 17,
-    gap: Spacing.sm,
   },
-  signInBtnText: {
-    color: Colors.white,
-    fontSize: Typography.lg,
+  btnPressed: {
+    opacity: 0.88,
+    transform: [{ scale: 0.98 }],
+  },
+  signInText: {
+    fontSize: 16,
     fontFamily: 'Inter_600SemiBold',
+    color: Colors.text.onAccent,
+    letterSpacing: 0.5,
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: Spacing.xl,
-    gap: Spacing.md,
+    gap: 12,
+    marginBottom: 20,
   },
-  divider: { flex: 1, height: 1, backgroundColor: Colors.border },
+  dividerLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: Colors.glass.border,
+  },
   dividerText: {
-    color: Colors.textMuted,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_400Regular',
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.text.tertiary,
   },
-  footer: {
+  signupRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: Spacing.md,
   },
-  footerText: {
-    color: Colors.textSecondary,
-    fontSize: Typography.base,
+  signupPrompt: {
+    fontSize: 14,
     fontFamily: 'Inter_400Regular',
+    color: Colors.text.secondary,
   },
-  linkText: {
-    color: Colors.primary,
-    fontSize: Typography.base,
+  signupLink: {
+    fontSize: 14,
     fontFamily: 'Inter_600SemiBold',
-  },
-  guestBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.xs,
-    paddingVertical: Spacing.sm,
-  },
-  guestText: {
-    color: Colors.textMuted,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_400Regular',
-    textDecorationLine: 'underline',
-    textDecorationColor: Colors.textMuted,
+    color: Colors.accent.crimson,
   },
 });
 

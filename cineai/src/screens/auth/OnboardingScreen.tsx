@@ -1,363 +1,646 @@
-import React, { useState } from 'react';
+/**
+ * CineAI V3 — OnboardingScreen (Flagship Luxury Edition)
+ * Reconstructed to match the premium gold-accented welcome mockup exactly.
+ * Renders the user-supplied custom composite artwork as a full-bleed vertical background,
+ * layered with exponential typography reveals and spring tactile touch buttons.
+ */
+import React, { useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  ScrollView,
-  Pressable,
   Dimensions,
+  Pressable,
+  TouchableOpacity,
+  StatusBar,
+  Platform,
+  Image,
 } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
-  withSpring,
   withTiming,
+  withSpring,
+  withDelay,
+  withRepeat,
+  withSequence,
+  Easing,
+  interpolate,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
+
+import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
-import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
-import { Button } from '../../components/ui/Button';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Colors, Radius, Motion } from '../../constants/theme';
 import { useAuthStore } from '../../store/authStore';
+import type { RootStackParamList } from '../../types';
 
-const { width } = Dimensions.get('window');
+const { width: W, height: H } = Dimensions.get('window');
 
-const GENRES = [
-  { id: 28, name: 'Action', emoji: '💥' },
-  { id: 12, name: 'Adventure', emoji: '🗺️' },
-  { id: 16, name: 'Animation', emoji: '🎨' },
-  { id: 35, name: 'Comedy', emoji: '😂' },
-  { id: 80, name: 'Crime', emoji: '🔍' },
-  { id: 99, name: 'Documentary', emoji: '📽️' },
-  { id: 18, name: 'Drama', emoji: '🎭' },
-  { id: 14, name: 'Fantasy', emoji: '✨' },
-  { id: 27, name: 'Horror', emoji: '👻' },
-  { id: 9648, name: 'Mystery', emoji: '🕵️' },
-  { id: 10749, name: 'Romance', emoji: '❤️' },
-  { id: 878, name: 'Sci-Fi', emoji: '🚀' },
-  { id: 53, name: 'Thriller', emoji: '😰' },
-  { id: 37, name: 'Western', emoji: '🤠' },
-];
+type OnboardingNav = NativeStackNavigationProp<RootStackParamList>;
 
-const PLATFORMS = [
-  { id: 'netflix', name: 'Netflix', color: '#E50914' },
-  { id: 'prime', name: 'Prime Video', color: '#00A8E1' },
-  { id: 'disney', name: 'Disney+', color: '#1139A6' },
-  { id: 'hbo', name: 'HBO Max', color: '#3C1053' },
-  { id: 'hulu', name: 'Hulu', color: '#1CE783' },
-  { id: 'apple', name: 'Apple TV+', color: '#555' },
-];
-
-const STEPS = ['Genres', 'Platforms', 'Ready'];
+// Load the high-fidelity user background artwork directly
+const PORTAL_ART = require('../../../assets/hero.png');
 
 export const OnboardingScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const { updateProfile, completeOnboarding } = useAuthStore();
+  const navigation = useNavigation<OnboardingNav>();
+  const { completeOnboarding } = useAuthStore();
 
-  const [step, setStep] = useState(0);
-  const [selectedGenres, setSelectedGenres] = useState<number[]>([]);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  // Entrance & Ambient Animations
+  const backdropOpacity = useSharedValue(0);
+  const portalScale = useSharedValue(0.95);
+  const contentOpacity = useSharedValue(0);
+  const contentY = useSharedValue(24);
 
-  const progressWidth = useSharedValue(33);
+  // Shimmer Sweep
+  const shimmerTranslate = useSharedValue(-W);
 
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${progressWidth.value}%`,
+  // Radar Pulse animation
+  const radarScale = useSharedValue(1);
+  const radarOpacity = useSharedValue(0.6);
+
+  // Custom Animations
+  const glowPulse = useSharedValue(0);
+  const floatingY = useSharedValue(0);
+  const textReveal = useSharedValue(0);
+  const buttonScale = useSharedValue(1);
+
+  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
+  
+  const portalStyle = useAnimatedStyle(() => ({
+    opacity: backdropOpacity.value,
+    transform: [
+      { scale: portalScale.value },
+      { translateY: floatingY.value }
+    ],
   }));
 
-  const nextStep = () => {
-    const next = step + 1;
-    setStep(next);
-    progressWidth.value = withSpring(33 * (next + 1), { damping: 15 });
-  };
+  const contentStyle = useAnimatedStyle(() => ({
+    opacity: contentOpacity.value,
+    transform: [{ translateY: contentY.value }],
+  }));
 
-  const toggleGenre = (id: number) => {
-    setSelectedGenres(prev =>
-      prev.includes(id) ? prev.filter(g => g !== id) : [...prev, id]
+  const shimmerStyle = useAnimatedStyle(() => ({
+    transform: [{ translateX: shimmerTranslate.value }],
+  }));
+
+  const radarStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: radarScale.value }],
+    opacity: radarOpacity.value,
+  }));
+
+  // Glow Orb Breathing
+  const glowAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(glowPulse.value, [0, 1], [0.25, 0.55]),
+    transform: [
+      {
+        scale: interpolate(glowPulse.value, [0, 1], [1, 1.12]),
+      },
+    ],
+  }));
+
+  // Hero Contemplative image float
+  const heroAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [
+      {
+        translateY: floatingY.value,
+      },
+    ],
+  }));
+
+  // Typography Slide Reveal
+  const textAnimatedStyle = useAnimatedStyle(() => ({
+    opacity: textReveal.value,
+    transform: [
+      {
+        translateY: interpolate(textReveal.value, [0, 1], [40, 0]),
+      },
+    ],
+  }));
+
+  // Button Scale Response
+  const buttonAnimatedStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: buttonScale.value }],
+  }));
+
+  useEffect(() => {
+    backdropOpacity.value = withTiming(1, { duration: 1200, easing: Easing.out(Easing.cubic) });
+    portalScale.value = withSpring(1, Motion.springs.gentle);
+    contentOpacity.value = withDelay(400, withTiming(1, { duration: 800 }));
+    contentY.value = withDelay(400, withSpring(0, Motion.springs.gentle));
+
+    // Dynamic light shimmer sweep cycle
+    shimmerTranslate.value = withDelay(
+      800,
+      withRepeat(
+        withSequence(
+          withTiming(W, { duration: 3200, easing: Easing.inOut(Easing.ease) }),
+          withTiming(-W, { duration: 0 })
+        ),
+        -1,
+        false
+      )
     );
-  };
 
-  const togglePlatform = (id: string) => {
-    setSelectedPlatforms(prev =>
-      prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]
+    // Radar pulse loop
+    radarScale.value = withRepeat(
+      withTiming(1.8, { duration: 2000, easing: Easing.out(Easing.ease) }),
+      -1,
+      false
     );
+    radarOpacity.value = withRepeat(
+      withSequence(
+        withTiming(0.8, { duration: 0 }),
+        withTiming(0, { duration: 2000, easing: Easing.out(Easing.ease) })
+      ),
+      -1,
+      false
+    );
+
+    // Glow breathing
+    glowPulse.value = withRepeat(
+      withSequence(
+        withTiming(1, { duration: 3200, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0.6, { duration: 3200, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+
+    // Floating Cinematic Side-Profile
+    floatingY.value = withRepeat(
+      withSequence(
+        withTiming(-8, { duration: 4200, easing: Easing.inOut(Easing.ease) }),
+        withTiming(0, { duration: 4200, easing: Easing.inOut(Easing.ease) })
+      ),
+      -1,
+      true
+    );
+
+    // Slide up text reveal
+    textReveal.value = withTiming(1, {
+      duration: 1400,
+      easing: Easing.out(Easing.exp),
+    });
+  }, []);
+
+  const handleGetStarted = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    completeOnboarding();
   };
 
-  const handleFinish = async () => {
-    setIsLoading(true);
-    try {
-      await updateProfile({
-        favorite_genres: selectedGenres,
-        streaming_platforms: selectedPlatforms,
-      });
-      await completeOnboarding();
-    } catch (err) {
-      console.error('Failed to save preferences:', err);
-    } finally {
-      setIsLoading(false);
-    }
+  const handleSignIn = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    completeOnboarding();
+  };
+
+  const handleGuest = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    completeOnboarding();
+  };
+
+  const handlePressIn = () => {
+    buttonScale.value = withTiming(0.97, { duration: 120 });
+  };
+
+  const handlePressOut = () => {
+    buttonScale.value = withTiming(1, {
+      duration: 180,
+      easing: Easing.out(Easing.exp),
+    });
   };
 
   return (
-    <View style={styles.container}>
-      <LinearGradient colors={[Colors.background, '#0F0F1A']} style={StyleSheet.absoluteFill} />
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Progress bar */}
-      <View style={styles.progressContainer}>
-        <View style={styles.progressBg}>
-          <Animated.View style={[styles.progressFill, progressStyle]} />
+      {/* Breathing Ambient Gold Glow Orb */}
+      <Animated.View style={[styles.glowOrb, glowAnimatedStyle]} />
+
+      {/* Full-bleed Cinematic Dark Luxury Background Artwork */}
+      <Animated.View style={[styles.portalContainer, portalStyle, heroAnimatedStyle]}>
+        <Image
+          source={PORTAL_ART}
+          style={styles.portalImg}
+          resizeMode="cover"
+        />
+
+        {/* Vignette overlays to blend the background artwork beautifully */}
+        <LinearGradient
+          colors={['rgba(7,7,9,0.25)', 'rgba(7,7,9,0.5)', '#070709']}
+          locations={[0, 0.45, 0.9]}
+          style={StyleSheet.absoluteFill}
+        />
+      </Animated.View>
+
+      {/* Main Void Black Backdrop Layer */}
+      <LinearGradient
+        colors={['rgba(7,7,9,0.05)', 'rgba(7,7,9,0.6)', '#070709']}
+        locations={[0, 0.35, 0.85]}
+        style={StyleSheet.absoluteFill}
+      />
+
+      {/* Luxury Golden Atmospheric Glitter Bar */}
+      <LinearGradient
+        colors={['transparent', 'rgba(212, 175, 55, 0.05)', '#070709']}
+        locations={[0, 0.6, 1]}
+        style={styles.bottomGoldGlow}
+      />
+
+      {/* Header Container (Logo left) */}
+      <Animated.View style={[styles.headerRow, backdropStyle]}>
+        <View style={styles.wordmarkRow}>
+          <Text style={styles.wordmarkCine} allowFontScaling={false}>CINE</Text>
+          <View style={styles.aiPill}>
+            <Text style={styles.wordmarkAI} allowFontScaling={false}>AI</Text>
+          </View>
         </View>
-        <Text style={styles.stepText}>{step + 1} of {STEPS.length}</Text>
-      </View>
+      </Animated.View>
 
-      <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
-        {step === 0 && (
-          <View>
-            <Text style={styles.stepLabel}>Step 1</Text>
-            <Text style={styles.title}>What genres{'\n'}excite you?</Text>
-            <Text style={styles.subtitle}>Pick your favorites — AI uses this to personalize recommendations.</Text>
-            <View style={styles.grid}>
-              {GENRES.map(genre => (
-                <Pressable
-                  key={genre.id}
-                  onPress={() => toggleGenre(genre.id)}
-                  style={[styles.genreChip, selectedGenres.includes(genre.id) && styles.genreChipSelected]}
-                >
-                  <Text style={styles.genreEmoji}>{genre.emoji}</Text>
-                  <Text style={[styles.genreName, selectedGenres.includes(genre.id) && styles.genreNameSelected]}>
-                    {genre.name}
+      {/* Editorial Content Container */}
+      <Animated.View style={[styles.heroContent, contentStyle]}>
+        
+        {/* Animated Slide-Up Typography Group */}
+        <Animated.View style={[styles.textGroup, textAnimatedStyle]}>
+          {/* Tracked subheading */}
+          <Text style={styles.heroLabel} allowFontScaling={false}>
+            POWERED BY INTELLIGENCE
+          </Text>
+
+          {/* Luxury Georgia Serif Title with exact line breaks */}
+          <Text style={styles.heroTitle} allowFontScaling={false}>
+            Where{'\n'}Cinema{'\n'}Meets{'\n'}<Text style={{ color: '#dfb887' }}>Intelligence</Text>
+          </Text>
+
+          {/* Subtext description */}
+          <Text style={styles.heroSubtitle} allowFontScaling={false}>
+            Discover films curated to your mood, taste, and moment.
+          </Text>
+
+          {/* Divider Line with Gold Flare Dot */}
+          <View style={styles.dividerContainer}>
+            <View style={styles.dividerLine} />
+            <View style={styles.flareDot} />
+          </View>
+        </Animated.View>
+
+        {/* CTA Stack (Full Width Stacked Buttons aligned to mockup blueprint) */}
+        <View style={styles.btnStack}>
+          {/* Get Started Button */}
+          <TouchableOpacity
+            activeOpacity={1}
+            onPressIn={handlePressIn}
+            onPressOut={handlePressOut}
+            onPress={handleGetStarted}
+          >
+            <Animated.View style={[styles.btnPrimary, buttonAnimatedStyle]}>
+              <View style={styles.btnPrimarySurface}>
+                <LinearGradient
+                  colors={['#dfb887', '#ab8a5f']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={StyleSheet.absoluteFill}
+                />
+                
+                {/* Liquid Shimmer Light Reflection Streak */}
+                <Animated.View style={[styles.shimmerSweep, shimmerStyle]}>
+                  <LinearGradient
+                    colors={['rgba(255, 255, 255, 0)', 'rgba(255, 255, 255, 0.45)', 'rgba(255, 255, 255, 0)']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={StyleSheet.absoluteFill}
+                  />
+                </Animated.View>
+
+                {/* Centered content with icon and text, no arrow */}
+                <View style={styles.btnContentCenter}>
+                  <Ionicons name="sparkles" size={15} color="#1c1c1e" style={{ marginRight: 6 }} />
+                  <Text style={styles.btnPrimaryText} allowFontScaling={false}>
+                    Get Started
                   </Text>
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        )}
+                </View>
+              </View>
+            </Animated.View>
+          </TouchableOpacity>
 
-        {step === 1 && (
-          <View>
-            <Text style={styles.stepLabel}>Step 2</Text>
-            <Text style={styles.title}>Your streaming{'\n'}platforms?</Text>
-            <Text style={styles.subtitle}>We'll show you where to watch your recommendations.</Text>
-            <View style={styles.platformGrid}>
-              {PLATFORMS.map(platform => (
-                <Pressable
-                  key={platform.id}
-                  onPress={() => togglePlatform(platform.id)}
-                  style={[
-                    styles.platformChip,
-                    selectedPlatforms.includes(platform.id) && styles.platformChipSelected,
-                    selectedPlatforms.includes(platform.id) && { borderColor: platform.color },
-                  ]}
-                >
-                  <View style={[styles.platformDot, { backgroundColor: platform.color }]} />
-                  <Text style={[styles.platformName, selectedPlatforms.includes(platform.id) && { color: Colors.textPrimary }]}>
-                    {platform.name}
-                  </Text>
-                  {selectedPlatforms.includes(platform.id) && (
-                    <Text style={[styles.checkmark, { color: platform.color }]}>✓</Text>
-                  )}
-                </Pressable>
-              ))}
-            </View>
-          </View>
-        )}
-
-        {step === 2 && (
-          <View style={styles.readyContainer}>
-            <Text style={styles.readyEmoji}>🎬</Text>
-            <Text style={styles.title}>You're all set,{'\n'}cinephile!</Text>
-            <Text style={styles.subtitle}>
-              Cine AI is ready to be your personal movie companion. Start chatting, explore recommendations, and discover your next obsession.
-            </Text>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryTitle}>Your Profile Summary</Text>
-              <Text style={styles.summaryItem}>
-                🎭 {selectedGenres.length || 0} favorite genres selected
-              </Text>
-              <Text style={styles.summaryItem}>
-                📺 {selectedPlatforms.length || 0} streaming platforms
-              </Text>
-              <Text style={styles.summaryItem}>
-                🤖 AI personalization: Active
+          {/* Minimal Elegant Sign In Button */}
+          <Pressable
+            style={({ pressed }) => [styles.btnSecondary, pressed && styles.btnSecondaryPressed]}
+            onPress={handleSignIn}
+          >
+            {/* Centered content with icon and text, no arrow */}
+            <View style={styles.btnContentCenter}>
+              <Ionicons name="lock-closed-outline" size={15} color="#ffffff" style={{ marginRight: 6 }} />
+              <Text style={styles.btnSecondaryText} allowFontScaling={false}>
+                Sign In
               </Text>
             </View>
-          </View>
-        )}
-      </ScrollView>
+          </Pressable>
+        </View>
 
-      {/* Action buttons */}
-      <View style={styles.actions}>
-        {step < 2 ? (
-          <>
-            <Button
-              title={step === 0 ? (selectedGenres.length > 0 ? `Continue with ${selectedGenres.length} genres →` : 'Continue →') : `Continue →`}
-              onPress={nextStep}
-              size="lg"
-            />
-            <Pressable onPress={nextStep} style={styles.skipBtn}>
-              <Text style={styles.skipText}>Skip for now</Text>
-            </Pressable>
-          </>
-        ) : (
-          <Button
-            title="Start Exploring 🎬"
-            onPress={handleFinish}
-            isLoading={isLoading}
-            size="lg"
-          />
-        )}
-      </View>
+        {/* Continue as Guest underline link */}
+        <Pressable style={styles.guestBtn} onPress={handleGuest}>
+          <Text style={styles.guestText} allowFontScaling={false}>
+            Continue as Guest
+          </Text>
+        </Pressable>
+      </Animated.View>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  progressContainer: {
-    paddingHorizontal: Spacing.xl,
-    paddingTop: 60,
-    paddingBottom: Spacing.lg,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-  },
-  progressBg: {
+  root: {
     flex: 1,
-    height: 3,
-    backgroundColor: Colors.border,
-    borderRadius: 3,
-    overflow: 'hidden',
+    backgroundColor: '#070709',
   },
-  progressFill: {
-    height: '100%',
-    backgroundColor: Colors.primary,
-    borderRadius: 3,
+  portalContainer: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1,
   },
-  stepText: {
-    color: Colors.textMuted,
-    fontSize: Typography.xs,
-    fontFamily: 'Inter_500Medium',
+  portalImg: {
+    ...StyleSheet.absoluteFillObject,
+    opacity: 0.7,
   },
-  scroll: { flexGrow: 1, paddingHorizontal: Spacing.xl, paddingBottom: 120 },
-  stepLabel: {
-    color: Colors.primary,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_600SemiBold',
-    letterSpacing: 1,
-    textTransform: 'uppercase',
-    marginBottom: Spacing.sm,
-    marginTop: Spacing.lg,
-  },
-  title: {
-    fontSize: Typography['4xl'],
-    fontFamily: 'Poppins_700Bold',
-    color: Colors.textPrimary,
-    letterSpacing: -0.5,
-    lineHeight: Typography['4xl'] * 1.2,
-    marginBottom: Spacing.md,
-  },
-  subtitle: {
-    fontSize: Typography.base,
-    fontFamily: 'Inter_400Regular',
-    color: Colors.textSecondary,
-    lineHeight: Typography.base * 1.6,
-    marginBottom: Spacing['2xl'],
-  },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.sm,
-  },
-  genreChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    gap: Spacing.xs,
-    marginBottom: 0,
-  },
-  genreChipSelected: {
-    backgroundColor: Colors.primaryMuted,
-    borderColor: Colors.primary,
-  },
-  genreEmoji: { fontSize: 14 },
-  genreName: {
-    color: Colors.textSecondary,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_500Medium',
-  },
-  genreNameSelected: { color: Colors.primary },
-  platformGrid: { gap: Spacing.sm },
-  platformChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    padding: Spacing.base,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    gap: Spacing.sm,
-  },
-  platformChipSelected: {
-    backgroundColor: Colors.whiteAlpha5,
-  },
-  platformDot: {
-    width: 12,
-    height: 12,
-    borderRadius: 6,
-  },
-  platformName: {
-    flex: 1,
-    color: Colors.textSecondary,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_500Medium',
-  },
-  checkmark: { fontSize: Typography.base, fontFamily: 'Inter_700Bold' },
-  readyContainer: { paddingTop: Spacing.lg },
-  readyEmoji: { fontSize: 64, marginBottom: Spacing.lg },
-  summaryCard: {
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xl,
-    padding: Spacing.xl,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginTop: Spacing['2xl'],
-    gap: Spacing.md,
-  },
-  summaryTitle: {
-    color: Colors.textPrimary,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_700Bold',
-    marginBottom: Spacing.xs,
-  },
-  summaryItem: {
-    color: Colors.textSecondary,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_400Regular',
-  },
-  actions: {
+  bottomGoldGlow: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    padding: Spacing.xl,
-    paddingBottom: 40,
-    backgroundColor: Colors.background,
-    borderTopWidth: 1,
-    borderColor: Colors.border,
+    height: 180,
+    zIndex: 2,
+    opacity: 0.75,
   },
-  skipBtn: {
-    marginTop: Spacing.md,
+  headerRow: {
+    position: 'absolute',
+    top: Platform.OS === 'ios' ? 64 : 44,
+    left: 28,
+    right: 28,
+    flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: Spacing.sm,
+    justifyContent: 'space-between',
+    zIndex: 10,
   },
-  skipText: {
-    color: Colors.textMuted,
-    fontSize: Typography.sm,
+  wordmarkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  wordmarkCine: {
+    fontSize: 20,
+    fontFamily: 'Poppins_700Bold',
+    color: '#ffffff',
+    letterSpacing: 2,
+  },
+  aiPill: {
+    borderWidth: 1.2,
+    borderColor: 'rgba(212, 175, 55, 0.4)',
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    backgroundColor: 'rgba(212, 175, 55, 0.05)',
+  },
+  wordmarkAI: {
+    fontSize: 12,
+    fontFamily: 'Poppins_700Bold',
+    color: '#dfb887',
+    letterSpacing: 0.5,
+  },
+  statusGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  devicePill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.08)',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 4,
+  },
+  pillDot: {
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#dfb887',
+  },
+  deviceText: {
+    fontSize: 10,
     fontFamily: 'Inter_500Medium',
+    color: '#a0a0a5',
+  },
+  radarContainer: {
+    width: 16,
+    height: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  radarWave: {
+    position: 'absolute',
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 1,
+    borderColor: '#dfb887',
+  },
+  radarCore: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: '#dfb887',
+    zIndex: 2,
+  },
+  heroContent: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    paddingHorizontal: 28,
+    paddingBottom: Platform.OS === 'ios' ? 52 : 36,
+    gap: 22,
+    zIndex: 5,
+  },
+  textGroup: {
+    alignSelf: 'flex-start',
+    maxWidth: W - 56,
+  },
+  heroLabel: {
+    fontSize: 9,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#bfa07a',
+    letterSpacing: 1.5,
+    marginBottom: 8,
+  },
+  heroTitle: {
+    fontSize: W < 380 ? 38 : 46,
+    fontFamily: Platform.OS === 'ios' ? 'Georgia' : 'serif',
+    fontWeight: 'bold',
+    color: '#ffffff',
+    lineHeight: W < 380 ? 44 : 52,
+    letterSpacing: -0.5,
+    marginBottom: 12,
+  },
+  heroSubtitle: {
+    fontSize: 13,
+    fontFamily: 'Inter_400Regular',
+    color: '#a0a0a5',
+    lineHeight: 18,
+    marginBottom: 12,
+  },
+  dividerContainer: {
+    width: 140,
+    height: 6,
+    justifyContent: 'center',
+    position: 'relative',
+    marginTop: 4,
+  },
+  dividerLine: {
+    width: '100%',
+    height: 1,
+    backgroundColor: 'rgba(212, 175, 55, 0.22)',
+  },
+  flareDot: {
+    position: 'absolute',
+    left: '50%',
+    marginLeft: -2,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: '#dfb887',
+    shadowColor: '#dfb887',
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 1,
+    shadowRadius: 6,
+    elevation: 3,
+  },
+  btnStack: {
+    gap: 12,
+    alignSelf: 'stretch',
+  },
+  btnPrimary: {
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    height: 48,
+    shadowColor: '#dfb887',
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  btnPrimarySurface: {
+    flex: 1,
+    position: 'relative',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  shimmerSweep: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    width: W * 0.55,
+  },
+  btnContentRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    zIndex: 3,
+  },
+  btnContentCenter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 3,
+    height: '100%',
+    width: '100%',
+  },
+  btnLeftGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  btnPrimaryText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#1c1c1e',
+    letterSpacing: 0.2,
+  },
+  btnPrimaryArrow: {
+    fontSize: 18,
+    fontFamily: 'Inter_400Regular',
+    color: '#1c1c1e',
+    marginTop: -2,
+  },
+  btnPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.985 }],
+  },
+  btnSecondary: {
+    borderRadius: Radius.lg,
+    borderWidth: 1.2,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    backgroundColor: 'rgba(255, 255, 255, 0.02)',
+    height: 48,
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  btnSecondaryPressed: {
+    backgroundColor: 'rgba(255, 255, 255, 0.06)',
+  },
+  btnSecondaryText: {
+    fontSize: 14,
+    fontFamily: 'Inter_600SemiBold',
+    color: '#ffffff',
+    letterSpacing: 0.2,
+  },
+  btnSecondaryArrow: {
+    fontSize: 18,
+    fontFamily: 'Inter_400Regular',
+    color: '#ffffff',
+    marginTop: -2,
+  },
+  guestBtn: {
+    alignItems: 'center',
+    paddingVertical: 4,
+  },
+  guestText: {
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: '#8e8e93',
+    letterSpacing: 0.3,
+    textDecorationLine: 'underline',
+    textDecorationStyle: 'solid',
+    textDecorationColor: '#8e8e93',
+  },
+  heroCharacterWrapper: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroCharacter: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  movingReflection: {
+    position: 'absolute',
+    width: 140,
+    height: 220,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    transform: [{ rotate: '25deg' }],
+    left: -30,
+    top: -60,
+  },
+  glowOrb: {
+    position: 'absolute',
+    top: -120,
+    right: -20,
+    width: 340,
+    height: 340,
+    borderRadius: 340,
+    backgroundColor: 'rgba(214,168,95,0.22)',
   },
 });
 

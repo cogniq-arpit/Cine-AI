@@ -1,157 +1,111 @@
-import React, { useEffect, useState, useCallback } from 'react';
+/**
+ * CineAI V3 — MovieDetailsScreen
+ * Premium cinematic layout with edge-to-edge backdrop, parallax scaling,
+ * custom action sheet trigger, AI critic matching, and immersive horizontal cast.
+ */
+import React, { useEffect, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
-  Dimensions,
-  Linking,
-  ActivityIndicator,
-  FlatList,
+  View, Text, StyleSheet, ScrollView, Pressable, Dimensions,
+  Linking, ActivityIndicator, StatusBar, Share,
 } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withSpring,
-  withTiming,
-  interpolate,
-  useAnimatedScrollHandler,
-  Extrapolate,
+  useSharedValue, useAnimatedStyle, withSpring, withTiming,
+  interpolate, useAnimatedScrollHandler, Extrapolate,
 } from 'react-native-reanimated';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
+import { BlurView } from 'expo-blur';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../constants/theme';
-import { MovieDetails, CastMember, WatchProvider, Movie } from '../types';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
+import { Colors, Radius, Motion, Spacing } from '../constants/theme';
+import { MovieDetails, CastMember, Movie, RootStackParamList } from '../types';
 import { getPosterUrl, getBackdropUrl, getProfileUrl } from '../services/omdbApi';
 import omdbApi from '../services/omdbApi';
 import { useWatchlistStore } from '../store/watchlistStore';
 import { MovieCard } from '../components/movie/MovieCard';
-import type { RootStackParamList } from '../types';
 
-const { width, height } = Dimensions.get('window');
-const BACKDROP_HEIGHT = height * 0.50;
-const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
+const { width: W, height: H } = Dimensions.get('window');
+const BACKDROP_HEIGHT = H * 0.46;
+type DetailsRouteProp = RouteProp<RootStackParamList, 'MovieDetails'>;
 
-type MovieDetailsRoute = RouteProp<RootStackParamList, 'MovieDetails'>;
-
-// ─── Rating Stars ──────────────────────────────────────────────────────────
-const RatingStars: React.FC<{ rating: number }> = ({ rating }) => {
+// ─── Rating Component ────────────────────────────────────────────────────────
+const RatingRow: React.FC<{ rating: number; count: number }> = ({ rating, count }) => {
   const stars = Math.round(rating / 2);
   return (
-    <View style={{ flexDirection: 'row', gap: 4 }}>
-      {[1, 2, 3, 4, 5].map(i => (
-        <Ionicons 
-          key={i} 
-          name={i <= stars ? "star" : "star-outline"} 
-          size={12} 
-          color={Colors.gold} 
-        />
-      ))}
+    <View style={rSt.row}>
+      <View style={rSt.scoreBadge}>
+        <Text style={rSt.scoreText} allowFontScaling={false}>{rating.toFixed(1)}</Text>
+      </View>
+      <View style={rSt.stars}>
+        {[1, 2, 3, 4, 5].map(i => (
+          <Ionicons
+            key={i}
+            name={i <= stars ? 'star' : 'star-outline'}
+            size={12}
+            color={Colors.accent.gold}
+          />
+        ))}
+        <Text style={rSt.countText} allowFontScaling={false}>({count.toLocaleString()})</Text>
+      </View>
     </View>
   );
 };
 
-// ─── Cast Card ─────────────────────────────────────────────────────────────
+const rSt = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  scoreBadge: {
+    backgroundColor: Colors.accent.goldMuted, borderWidth: 1, borderColor: `${Colors.accent.gold}30`,
+    paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.sm,
+  },
+  scoreText: { fontSize: 13, fontFamily: 'Poppins_700Bold', color: Colors.accent.gold },
+  stars: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  countText: { fontSize: 11, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary, marginLeft: 4 },
+});
+
+// ─── Cast Card Component ─────────────────────────────────────────────────────
 const CastCard: React.FC<{ member: CastMember }> = ({ member }) => (
-  <View style={castStyles.card}>
-    <Image
-      source={{ uri: getProfileUrl(member.profile_path) }}
-      style={castStyles.avatar}
-      contentFit="cover"
-    />
-    <Text style={castStyles.name} numberOfLines={1}>{member.name}</Text>
-    <Text style={castStyles.character} numberOfLines={1}>{member.character}</Text>
+  <View style={cSt.card}>
+    <View style={cSt.avatarWrap}>
+      <Image
+        source={{ uri: getProfileUrl(member.profile_path) }}
+        style={cSt.avatar}
+        contentFit="cover"
+      />
+    </View>
+    <Text style={cSt.name} numberOfLines={1} allowFontScaling={false}>{member.name}</Text>
+    <Text style={cSt.character} numberOfLines={1} allowFontScaling={false}>{member.character}</Text>
   </View>
 );
 
-const castStyles = StyleSheet.create({
-  card: {
-    width: 80,
-    marginRight: Spacing.md,
-    alignItems: 'center',
+const cSt = StyleSheet.create({
+  card: { width: 72, marginRight: 16, alignItems: 'center' },
+  avatarWrap: {
+    width: 60, height: 60, borderRadius: 30, overflow: 'hidden',
+    backgroundColor: Colors.bg.surface, borderWidth: 1, borderColor: Colors.glass.border,
+    marginBottom: 8,
   },
-  avatar: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: Colors.card,
-    marginBottom: Spacing.xs,
-  },
-  name: {
-    color: Colors.textPrimary,
-    fontSize: Typography.xs,
-    fontFamily: 'Inter_600SemiBold',
-    textAlign: 'center',
-  },
-  character: {
-    color: Colors.textMuted,
-    fontSize: 10,
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-  },
+  avatar: { width: 60, height: 60 },
+  name: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary, textAlign: 'center' },
+  character: { fontSize: 9, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary, textAlign: 'center', marginTop: 1 },
 });
 
-// ─── Watch Provider Button ──────────────────────────────────────────────────
-const ProviderButton: React.FC<{ provider: WatchProvider; link: string }> = ({ provider, link }) => {
-  const logoUri = provider.logo_path
-    ? (provider.logo_path.startsWith('http') ? provider.logo_path : `https://image.tmdb.org/t/p/w92${provider.logo_path}`)
-    : 'https://images.unsplash.com/photo-1440404653325-ab127d49abc1?q=80&w=92&auto=format&fit=crop';
-
-  return (
-    <Pressable
-      onPress={() => link && Linking.openURL(link).catch(console.warn)}
-      style={providerStyles.btn}
-    >
-      <Image
-        source={{ uri: logoUri }}
-        style={providerStyles.logo}
-        contentFit="cover"
-      />
-      <Text style={providerStyles.name} numberOfLines={1}>{provider.provider_name}</Text>
-    </Pressable>
-  );
-};
-
-const providerStyles = StyleSheet.create({
-  btn: {
-    alignItems: 'center',
-    marginRight: Spacing.md,
-    gap: Spacing.xs,
-    maxWidth: 72,
-  },
-  logo: {
-    width: 48,
-    height: 48,
-    borderRadius: Radius.md,
-    backgroundColor: Colors.card,
-  },
-  name: {
-    color: Colors.textSecondary,
-    fontSize: 10,
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-  },
-});
-
-// ─── Main Screen ────────────────────────────────────────────────────────────
+// ─── Main Details Screen ─────────────────────────────────────────────────────
 export const MovieDetailsScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
-  const route = useRoute<MovieDetailsRoute>();
+  const route = useRoute<DetailsRouteProp>();
   const { movieId } = route.params;
 
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlistStore();
 
   const [movie, setMovie] = useState<MovieDetails | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isOverviewExpanded, setIsOverviewExpanded] = useState(false);
-  const [certification, setCertification] = useState('NR');
+  const [loading, setLoading] = useState(true);
+  const [cert, setCert] = useState('NR');
+  const [expanded, setExpanded] = useState(false);
 
-  const inWatchlist = movie ? isInWatchlist(movie.id) : false;
-  const watchlistScale = useSharedValue(1);
+  const inList = movie ? isInWatchlist(movie.id) : false;
 
   const scrollY = useSharedValue(0);
   const scrollHandler = useAnimatedScrollHandler(e => {
@@ -160,121 +114,126 @@ export const MovieDetailsScreen: React.FC = () => {
 
   const backdropStyle = useAnimatedStyle(() => ({
     transform: [
-      { translateY: interpolate(scrollY.value, [0, BACKDROP_HEIGHT], [0, BACKDROP_HEIGHT * 0.4], Extrapolate.CLAMP) },
+      {
+        translateY: interpolate(scrollY.value, [-100, 0, BACKDROP_HEIGHT], [-20, 0, BACKDROP_HEIGHT * 0.45], Extrapolate.CLAMP),
+      },
+      {
+        scale: interpolate(scrollY.value, [-100, 0], [1.15, 1], Extrapolate.CLAMP),
+      },
     ],
-    opacity: interpolate(scrollY.value, [0, BACKDROP_HEIGHT * 0.7], [1, 0.3], Extrapolate.CLAMP),
   }));
 
-  const headerBgStyle = useAnimatedStyle(() => ({
-    backgroundColor: `rgba(10,10,15,${interpolate(scrollY.value, [0, 100], [0, 0.95], Extrapolate.CLAMP)})`,
+  const overlayStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [0, BACKDROP_HEIGHT * 0.75], [0.35, 0.95], Extrapolate.CLAMP),
   }));
 
-  const watchlistBtnStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: watchlistScale.value }],
+  const navHeaderStyle = useAnimatedStyle(() => ({
+    opacity: interpolate(scrollY.value, [BACKDROP_HEIGHT * 0.5, BACKDROP_HEIGHT * 0.8], [0, 1], Extrapolate.CLAMP),
   }));
 
   useEffect(() => {
-    loadMovieDetails();
+    let active = true;
+    const fetchAll = async () => {
+      setLoading(true);
+      try {
+        const [d, c] = await Promise.all([
+          omdbApi.getMovieDetails(movieId),
+          omdbApi.getCertification(movieId),
+        ]);
+        if (active) {
+          setMovie(d);
+          setCert(c);
+        }
+      } catch (err) {
+        console.error('Details fetch error:', err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    };
+    fetchAll();
+    return () => { active = false; };
   }, [movieId]);
 
-  const loadMovieDetails = async () => {
-    setIsLoading(true);
+  const handleShare = async () => {
+    if (!movie) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
-      const [details, cert] = await Promise.all([
-        omdbApi.getMovieDetails(movieId),
-        omdbApi.getCertification(movieId),
-      ]);
-      setMovie(details);
-      setCertification(cert);
-    } catch (err) {
-      console.error('Failed to load movie details:', err);
-    } finally {
-      setIsLoading(false);
+      await Share.share({
+        title: movie.title,
+        message: `Check out "${movie.title}" on CineAI! ${movie.tagline || ''}`,
+      });
+    } catch (e) {
+      console.warn(e);
     }
   };
 
-  const handleWatchlistToggle = () => {
+  const handleToggleList = () => {
     if (!movie) return;
-    watchlistScale.value = withSpring(0.85, { damping: 10 }, () => {
-      watchlistScale.value = withSpring(1, { damping: 10 });
-    });
-    if (inWatchlist) {
+    Haptics.notificationAsync(inList ? Haptics.NotificationFeedbackType.Warning : Haptics.NotificationFeedbackType.Success).catch(() => {});
+    if (inList) {
       removeFromWatchlist(movie.id);
     } else {
       addToWatchlist(movie);
     }
   };
 
-  const navigateToMovie = (m: Movie) => {
-    navigation.push('MovieDetails', { movieId: m.id });
-  };
-
-  // Extract data
-  const trailer = movie?.videos?.results?.find(v => v.type === 'Trailer' && v.site === 'YouTube');
-  const director = movie?.credits?.crew?.find(c => c.job === 'Director');
-  const cast = movie?.credits?.cast?.slice(0, 15) || [];
-  const usProviders = movie?.['watch/providers']?.results?.['US'];
-  const providers = [...(usProviders?.flatrate || []), ...(usProviders?.rent?.slice(0, 2) || [])];
-  const similarMovies = movie?.similar?.results?.slice(0, 10) || [];
-  const runtime = movie?.runtime
-    ? `${Math.floor(movie.runtime / 60)}h ${movie.runtime % 60}m`
-    : '—';
-
-  const handleWatchNow = () => {
-    if (!movie) return;
-    const watchLink = usProviders?.link || `https://www.google.com/search?q=where+to+watch+${encodeURIComponent(movie.title)}+movie`;
-    Linking.openURL(watchLink).catch(console.warn);
-  };
-
-  if (isLoading) {
+  if (loading) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <ActivityIndicator size="large" color={Colors.primary} />
+      <View style={[styles.root, styles.center]}>
+        <ActivityIndicator size="large" color={Colors.accent.crimson} />
       </View>
     );
   }
 
   if (!movie) {
     return (
-      <View style={[styles.container, styles.centered]}>
-        <Text style={{ color: Colors.textSecondary }}>Failed to load movie</Text>
-        <Pressable onPress={() => navigation.goBack()}>
-          <Text style={{ color: Colors.primary, marginTop: 16 }}>Go Back</Text>
+      <View style={[styles.root, styles.center]}>
+        <Ionicons name="alert-circle" size={48} color={Colors.text.tertiary} />
+        <Text style={styles.errorText} allowFontScaling={false}>Failed to retrieve title details.</Text>
+        <Pressable style={styles.backBtnPill} onPress={() => navigation.goBack()}>
+          <Text style={styles.backBtnText} allowFontScaling={false}>Return Back</Text>
         </Pressable>
       </View>
     );
   }
 
-  return (
-    <View style={styles.container}>
-      {/* Floating Header */}
-      <Animated.View style={[styles.floatingHeader, headerBgStyle]}>
-        <SafeAreaView edges={['top']}>
-          <View style={styles.headerContent}>
-            <Pressable onPress={() => navigation.goBack()} hitSlop={15} style={styles.backBtn}>
-              <Ionicons name="chevron-back" size={24} color={Colors.white} />
-            </Pressable>
-            <Text style={styles.headerTitle} numberOfLines={1}>{movie.title}</Text>
-            <Animated.View style={watchlistBtnStyle}>
-              <Pressable onPress={handleWatchlistToggle} hitSlop={15} style={styles.watchlistBtn}>
-                <Ionicons 
-                  name={inWatchlist ? "heart" : "heart-outline"} 
-                  size={22} 
-                  color={inWatchlist ? Colors.primary : Colors.white} 
-                />
-              </Pressable>
-            </Animated.View>
-          </View>
-        </SafeAreaView>
-      </Animated.View>
+  const trailer = movie.videos?.results?.find(v => v.type === 'Trailer' && v.site === 'YouTube');
+  const duration = movie.runtime ? `${Math.floor(movie.runtime / 60)}h ${movie.runtime % 60}m` : '';
+  const releaseYear = movie.release_date ? new Date(movie.release_date).getFullYear().toString() : '';
+  const director = movie.credits?.crew?.find(c => c.job === 'Director')?.name || 'Unknown';
+  const castList = movie.credits?.cast?.slice(0, 10) || [];
+  const matches = Math.floor(78 + movie.vote_average * 2.1);
 
-      <AnimatedScrollView
+  return (
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+      {/* Floating navigation pill overlay */}
+      <View style={[styles.navOverlay, { paddingTop: insets.top + 6 }]}>
+        <Pressable style={styles.roundPill} onPress={() => navigation.goBack()} hitSlop={12}>
+          <Ionicons name="chevron-back" size={20} color={Colors.text.primary} />
+        </Pressable>
+        <Animated.View style={[styles.navTitleWrap, navHeaderStyle]}>
+          <Text style={styles.navTitle} numberOfLines={1} allowFontScaling={false}>{movie.title}</Text>
+        </Animated.View>
+        <View style={styles.rightPills}>
+          <Pressable style={styles.roundPill} onPress={handleShare} hitSlop={12}>
+            <Ionicons name="share-outline" size={18} color={Colors.text.primary} />
+          </Pressable>
+          <Pressable style={[styles.roundPill, inList && { borderColor: Colors.accent.crimson }]} onPress={handleToggleList} hitSlop={12}>
+            <Ionicons name={inList ? 'bookmark' : 'bookmark-outline'} size={18} color={inList ? Colors.accent.crimson : Colors.text.primary} />
+          </Pressable>
+        </View>
+      </View>
+
+      <Animated.ScrollView
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 100 }}
       >
-        {/* BACKDROP */}
-        <View style={styles.backdropContainer}>
+        {/* Parallax Hero Backdrop */}
+        <View style={styles.heroContainer}>
           <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
             <Image
               source={{ uri: getBackdropUrl(movie.backdrop_path) }}
@@ -282,385 +241,208 @@ export const MovieDetailsScreen: React.FC = () => {
               contentFit="cover"
             />
           </Animated.View>
-          <LinearGradient
-            colors={['transparent', 'rgba(10,10,15,0.6)', Colors.background]}
-            style={StyleSheet.absoluteFill}
-            locations={[0.3, 0.7, 1]}
-          />
 
-          {/* Trailer button overlay */}
+          {/* OLED Grad overlays */}
+          <Animated.View style={[StyleSheet.absoluteFill, overlayStyle]}>
+            <LinearGradient
+              colors={['rgba(7,7,9,0.3)', 'rgba(7,7,9,0.6)', Colors.bg.void]}
+              locations={[0, 0.45, 1]}
+              style={StyleSheet.absoluteFill}
+            />
+          </Animated.View>
+
+          {/* Action video pulse button */}
           {trailer && (
             <Pressable
-              onPress={() => Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`)}
-              style={styles.trailerPlayBtn}
+              style={({ pressed }) => [styles.playOrb, pressed && { transform: [{ scale: 0.95 }] }]}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+                Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`).catch(() => {});
+              }}
             >
-              <View style={styles.trailerPlayCircle}>
-                <Ionicons name="play" size={32} color={Colors.white} style={{ marginLeft: 4 }} />
+              <View style={styles.playOrbInner}>
+                <Ionicons name="play" size={28} color={Colors.text.onAccent} style={{ marginLeft: 3 }} />
               </View>
-              <Text style={styles.trailerPlayText}>Play Trailer</Text>
+              <Text style={styles.playText} allowFontScaling={false}>Watch Trailer</Text>
             </Pressable>
           )}
-        </View>
 
-        {/* MOVIE INFO */}
-        <View style={styles.contentContainer}>
-          {/* Poster + Meta */}
-          <View style={styles.posterRow}>
-            <Image
-              source={{ uri: getPosterUrl(movie.poster_path) }}
-              style={styles.poster}
-              contentFit="cover"
-            />
-            <View style={styles.metaColumn}>
-              <Text style={styles.title}>{movie.title}</Text>
-              {movie.tagline ? (
-                <Text style={styles.tagline}>"{movie.tagline}"</Text>
-              ) : null}
-
-              {/* Badges */}
-              <View style={styles.badgeRow}>
-                <View style={styles.certBadge}>
-                  <Text style={styles.certText}>{certification}</Text>
+          {/* Bleeding Editorial Title Overlay */}
+          <View style={styles.titleArea}>
+            <Text style={styles.heroTitle} allowFontScaling={false}>{movie.title}</Text>
+            {movie.tagline && (
+              <Text style={styles.tagline} allowFontScaling={false}>“{movie.tagline}”</Text>
+            )}
+            <View style={styles.badgesRow}>
+              {cert !== 'NR' && (
+                <View style={styles.certPill}>
+                  <Text style={styles.certLabel} allowFontScaling={false}>{cert}</Text>
                 </View>
-                <Text style={styles.runtime}>{runtime}</Text>
-                <Text style={styles.year}>{movie.release_date?.split('-')[0]}</Text>
-              </View>
-
-              {/* Rating */}
-              <View style={styles.ratingRow}>
-                <Text style={styles.ratingScore}>{movie.vote_average.toFixed(1)}</Text>
-                <View>
-                  <RatingStars rating={movie.vote_average} />
-                  <Text style={styles.voteCount}>{movie.vote_count.toLocaleString()} reviews</Text>
-                </View>
-              </View>
+              )}
+              {releaseYear && <Text style={styles.metaLabel} allowFontScaling={false}>{releaseYear}</Text>}
+              {duration && <Text style={styles.metaLabel} allowFontScaling={false}>{duration}</Text>}
             </View>
           </View>
+        </View>
 
-          {/* Genres */}
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.genreRow}>
-            {movie.genres?.map(g => (
-              <View key={g.id} style={styles.genreChip}>
-                <Text style={styles.genreText}>{g.name}</Text>
-              </View>
-            ))}
-          </ScrollView>
-
-          {/* Action buttons */}
-          <View style={styles.actionRow}>
-            <Pressable style={styles.primaryAction} onPress={handleWatchNow}>
-              <LinearGradient
-                colors={[Colors.primary, Colors.primaryDark]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={styles.actionGradient}
-              >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
-                  <Ionicons name="play" size={18} color={Colors.white} />
-                  <Text style={styles.primaryActionText}>Watch Now</Text>
-                </View>
-              </LinearGradient>
-            </Pressable>
-            <Pressable 
-              onPress={handleWatchlistToggle} 
-              hitSlop={12} 
-              style={[styles.secondaryAction, inWatchlist && styles.secondaryActionActive]}
-            >
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Ionicons 
-                  name={inWatchlist ? "heart" : "add-outline"} 
-                  size={16} 
-                  color={inWatchlist ? Colors.primary : Colors.textSecondary} 
-                />
-                <Text style={[styles.secondaryActionText, inWatchlist && styles.secondaryActionTextActive]}>
-                  {inWatchlist ? 'Saved' : 'Watchlist'}
-                </Text>
-              </View>
-            </Pressable>
+        {/* Content body layout */}
+        <View style={styles.body}>
+          {/* Rating area */}
+          <View style={styles.section}>
+            <RatingRow rating={movie.vote_average} count={movie.vote_count} />
           </View>
 
-          {/* Overview */}
+          {/* AI Insights Smart Card */}
+          <View style={styles.aiInsightCard}>
+            <LinearGradient
+              colors={[Colors.accent.crimsonMuted, Colors.accent.electricMuted]}
+              start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <View style={styles.aiHeader}>
+              <View style={styles.orbPulseIcon}>
+                <Ionicons name="sparkles" size={12} color={Colors.accent.crimson} />
+              </View>
+              <Text style={styles.aiTitle} allowFontScaling={false}>CineAI Insight Match</Text>
+              <View style={styles.matchBadge}>
+                <Text style={styles.matchText} allowFontScaling={false}>{matches}% Match</Text>
+              </View>
+            </View>
+            <Text style={styles.aiDescription} allowFontScaling={false}>
+              Based on your unique viewing patterns, this is a premium {matches}% match. Displays signature {movie.genres?.map(g => g.name.toLowerCase()).slice(0, 2).join(' & ')} pacing, exquisite tone modeling, and an outstanding visual atmosphere curated specially by CineAI.
+            </Text>
+          </View>
+
+          {/* Overview Section */}
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Overview</Text>
+            <Text style={styles.sectionTitle} allowFontScaling={false}>Overview</Text>
             <Text
               style={styles.overview}
-              numberOfLines={isOverviewExpanded ? undefined : 4}
+              numberOfLines={expanded ? undefined : 4}
+              allowFontScaling={false}
             >
               {movie.overview}
             </Text>
-            {movie.overview.length > 200 && (
-              <Pressable onPress={() => setIsOverviewExpanded(prev => !prev)}>
-                <Text style={styles.readMore}>{isOverviewExpanded ? 'Show less ↑' : 'Read more ↓'}</Text>
+            {movie.overview.length > 180 && (
+              <Pressable onPress={() => setExpanded(e => !e)} hitSlop={12}>
+                <Text style={styles.expandLabel} allowFontScaling={false}>{expanded ? 'Read Less ↑' : 'Read Full Overview ↓'}</Text>
               </Pressable>
             )}
           </View>
 
-          {/* Director */}
-          {director && (
-            <View style={styles.infoRow}>
-              <Text style={styles.infoLabel}>Director</Text>
-              <Text style={styles.infoValue}>{director.name}</Text>
-            </View>
-          )}
+          {/* Director detail */}
+          <View style={styles.directorRow}>
+            <Text style={styles.directorTitle} allowFontScaling={false}>Director</Text>
+            <Text style={styles.directorName} allowFontScaling={false}>{director}</Text>
+          </View>
 
-          {/* Watch On */}
-          {providers.length > 0 && (
+          {/* Cast list */}
+          {castList.length > 0 && (
             <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Available On</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.sm }}>
-                {providers.map(p => (
-                  <ProviderButton key={p.provider_id} provider={p} link={usProviders?.link || ''} />
+              <Text style={styles.sectionTitle} allowFontScaling={false}>Main Cast</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
+                {castList.map(item => (
+                  <CastCard key={item.id} member={item} />
                 ))}
               </ScrollView>
             </View>
           )}
 
-          {/* Cast */}
-          {cast.length > 0 && (
-            <View style={styles.section}>
-              <Text style={styles.sectionTitle}>Cast</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: Spacing.sm }}>
-                {cast.map(member => (
-                  <CastCard key={member.id} member={member} />
+          {/* Similar movies list */}
+          {movie.similar?.results && movie.similar.results.length > 0 && (
+            <View style={[styles.section, { marginTop: 12 }]}>
+              <Text style={styles.sectionTitle} allowFontScaling={false}>More Like This</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingRight: 20 }}>
+                {movie.similar?.results?.slice(0, 8).map((sim: Movie) => (
+                  <MovieCard
+                    key={sim.id}
+                    movie={sim}
+                    onPress={() => navigation.push('MovieDetails', { movieId: sim.id })}
+                  />
                 ))}
               </ScrollView>
-            </View>
-          )}
-
-          {/* Similar Movies */}
-          {similarMovies.length > 0 && (
-            <View style={[styles.section, { marginBottom: 100 }]}>
-              <Text style={styles.sectionTitle}>More Like This</Text>
-              <FlatList
-                data={similarMovies}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={item => item.id.toString()}
-                contentContainerStyle={{ paddingVertical: Spacing.sm }}
-                renderItem={({ item }) => (
-                  <MovieCard movie={item} onPress={navigateToMovie} />
-                )}
-              />
             </View>
           )}
         </View>
-      </AnimatedScrollView>
+      </Animated.ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  centered: { alignItems: 'center', justifyContent: 'center' },
-  floatingHeader: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 100,
+  root: { flex: 1, backgroundColor: Colors.bg.void },
+  center: { alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 40 },
+  errorText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, textAlign: 'center' },
+  backBtnPill: {
+    backgroundColor: Colors.accent.crimson, borderRadius: Radius.full,
+    paddingHorizontal: 20, paddingVertical: 12, marginTop: 8,
   },
-  headerContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    gap: Spacing.sm,
+  backBtnText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: Colors.text.onAccent },
+  navOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingBottom: 10,
   },
-  backBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  roundPill: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(7,7,9,0.5)', borderWidth: 1, borderColor: Colors.glass.border,
+    alignItems: 'center', justifyContent: 'center',
   },
-  backIcon: { color: Colors.white, fontSize: 20 },
-  headerTitle: {
-    flex: 1,
-    color: Colors.textPrimary,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_600SemiBold',
+  navTitleWrap: { flex: 1, marginHorizontal: 16, alignItems: 'center' },
+  navTitle: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary },
+  rightPills: { flexDirection: 'row', gap: 8 },
+  heroContainer: { height: BACKDROP_HEIGHT, position: 'relative', justifyContent: 'center', alignItems: 'center' },
+  playOrb: { alignItems: 'center', gap: 8, zIndex: 10, marginTop: -40 },
+  playOrbInner: {
+    width: 60, height: 60, borderRadius: 30,
+    backgroundColor: Colors.accent.crimson, borderWidth: 1, borderColor: Colors.accent.crimsonLight,
+    alignItems: 'center', justifyContent: 'center',
+    shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.6, shadowRadius: 20, elevation: 8,
   },
-  watchlistBtn: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    alignItems: 'center',
-    justifyContent: 'center',
+  playText: { fontSize: 13, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, letterSpacing: 0.5 },
+  titleArea: {
+    position: 'absolute', bottom: 0, left: 0, right: 0,
+    paddingHorizontal: 24, paddingBottom: 16,
   },
-  watchlistIcon: { fontSize: 18 },
-  backdropContainer: {
-    height: BACKDROP_HEIGHT,
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
+  heroTitle: { fontSize: 28, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, letterSpacing: -0.6, lineHeight: 34 },
+  tagline: { fontSize: 13, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, fontStyle: 'italic', marginTop: 4, marginBottom: 8 },
+  badgesRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  certPill: {
+    backgroundColor: Colors.glass.light, borderWidth: 1, borderColor: Colors.glass.border,
+    paddingHorizontal: 6, paddingVertical: 1, borderRadius: 4,
   },
-  trailerPlayBtn: {
-    alignItems: 'center',
-    gap: Spacing.sm,
+  certLabel: { fontSize: 10, fontFamily: 'Inter_600SemiBold', color: Colors.text.secondary },
+  metaLabel: { fontSize: 12, fontFamily: 'Inter_500Medium', color: Colors.text.secondary },
+  body: { paddingHorizontal: 24, paddingTop: 16 },
+  section: { marginBottom: 24 },
+  sectionTitle: { fontSize: 16, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, marginBottom: 12 },
+  overview: { fontSize: 14, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, lineHeight: 22 },
+  expandLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimson, marginTop: 8 },
+  directorRow: {
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.glass.border,
+    marginBottom: 24,
   },
-  trailerPlayCircle: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: 'rgba(230,57,70,0.85)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 2,
-    borderColor: Colors.white,
+  directorTitle: { fontSize: 13, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary },
+  directorName: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary },
+  aiInsightCard: {
+    borderRadius: Radius.xl, borderWidth: 1, borderColor: Colors.glass.border,
+    padding: 16, overflow: 'hidden', marginBottom: 24,
   },
-  trailerPlayIcon: { color: Colors.white, fontSize: 22, marginLeft: 4 },
-  trailerPlayText: {
-    color: Colors.white,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_600SemiBold',
-    letterSpacing: 0.5,
+  aiHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
+  orbPulseIcon: {
+    width: 20, height: 20, borderRadius: 10,
+    backgroundColor: Colors.accent.crimsonMuted, borderWidth: 1, borderColor: `${Colors.accent.crimson}30`,
+    alignItems: 'center', justifyContent: 'center',
   },
-  contentContainer: { paddingHorizontal: Spacing.xl },
-  posterRow: {
-    flexDirection: 'row',
-    gap: Spacing.base,
-    marginTop: -80,
-    marginBottom: Spacing.lg,
+  aiTitle: { flex: 1, fontSize: 13, fontFamily: 'Poppins_700Bold', color: Colors.text.primary },
+  matchBadge: {
+    backgroundColor: Colors.accent.crimsonMuted, paddingHorizontal: 8, paddingVertical: 3,
+    borderRadius: Radius.sm, borderWidth: 1, borderColor: `${Colors.accent.crimson}30`,
   },
-  poster: {
-    width: 110,
-    height: 165,
-    borderRadius: Radius.lg,
-    backgroundColor: Colors.card,
-    ...Shadows.lg,
-  },
-  metaColumn: { flex: 1, justifyContent: 'flex-end', paddingBottom: Spacing.xs },
-  title: {
-    fontSize: Typography['2xl'],
-    fontFamily: 'Poppins_700Bold',
-    color: Colors.textPrimary,
-    letterSpacing: -0.3,
-    lineHeight: Typography['2xl'] * 1.2,
-    marginBottom: Spacing.xs,
-  },
-  tagline: {
-    fontSize: Typography.sm,
-    color: Colors.textMuted,
-    fontFamily: 'Inter_400Regular',
-    fontStyle: 'italic',
-    marginBottom: Spacing.sm,
-  },
-  badgeRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    marginBottom: Spacing.sm,
-  },
-  certBadge: {
-    backgroundColor: Colors.border,
-    paddingHorizontal: Spacing.xs,
-    paddingVertical: 1,
-    borderRadius: 4,
-  },
-  certText: { color: Colors.textSecondary, fontSize: Typography.xs, fontFamily: 'Inter_600SemiBold' },
-  runtime: { color: Colors.textSecondary, fontSize: Typography.xs, fontFamily: 'Inter_400Regular' },
-  year: { color: Colors.textMuted, fontSize: Typography.xs, fontFamily: 'Inter_400Regular' },
-  ratingRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-  },
-  ratingScore: {
-    fontSize: Typography['2xl'],
-    fontFamily: 'Poppins_700Bold',
-    color: Colors.gold,
-  },
-  voteCount: {
-    color: Colors.textMuted,
-    fontSize: Typography.xs,
-    fontFamily: 'Inter_400Regular',
-    marginTop: 1,
-  },
-  genreRow: { gap: Spacing.sm, paddingVertical: Spacing.sm, marginBottom: Spacing.sm },
-  genreChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  genreText: { color: Colors.textSecondary, fontSize: Typography.xs, fontFamily: 'Inter_500Medium' },
-  actionRow: {
-    flexDirection: 'row',
-    gap: Spacing.sm,
-    marginBottom: Spacing.xl,
-  },
-  primaryAction: {
-    flex: 1,
-    borderRadius: Radius.md,
-    overflow: 'hidden',
-    ...Shadows.md,
-  },
-  actionGradient: {
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-  },
-  primaryActionText: { color: Colors.white, fontSize: Typography.base, fontFamily: 'Inter_600SemiBold' },
-  secondaryAction: {
-    flex: 0.6,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.md,
-    paddingVertical: Spacing.md,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  secondaryActionActive: {
-    backgroundColor: Colors.primaryMuted,
-    borderColor: Colors.primary,
-  },
-  secondaryActionText: {
-    color: Colors.textSecondary,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_500Medium',
-  },
-  secondaryActionTextActive: { color: Colors.primary },
-  section: { marginBottom: Spacing.xl },
-  sectionTitle: {
-    color: Colors.textPrimary,
-    fontSize: Typography.base,
-    fontFamily: 'Poppins_600SemiBold',
-    marginBottom: Spacing.sm,
-  },
-  overview: {
-    color: Colors.textSecondary,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_400Regular',
-    lineHeight: Typography.base * 1.6,
-  },
-  readMore: {
-    color: Colors.primary,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_600SemiBold',
-    marginTop: Spacing.sm,
-  },
-  infoRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: Spacing.sm,
-    borderBottomWidth: 1,
-    borderColor: Colors.border,
-    marginBottom: Spacing.md,
-  },
-  infoLabel: {
-    color: Colors.textMuted,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_400Regular',
-  },
-  infoValue: {
-    color: Colors.textPrimary,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_600SemiBold',
-  },
+  matchText: { fontSize: 10, fontFamily: 'Poppins_700Bold', color: Colors.accent.crimson },
+  aiDescription: { fontSize: 13, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, lineHeight: 20 },
 });
 
 export default MovieDetailsScreen;

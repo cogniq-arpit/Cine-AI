@@ -24,12 +24,21 @@ const cachedGet = async (params: Record<string, any>) => {
   if (apiCache.has(cacheKey)) {
     return apiCache.get(cacheKey);
   }
-  const { data } = await omdbClient.get('', { params: { ...params, apikey: OMDB_API_KEY } });
-  if (data && data.Response === 'True') {
-    apiCache.set(cacheKey, data);
+  try {
+    const { data } = await omdbClient.get('', { params: { ...params, apikey: OMDB_API_KEY } });
+    if (data && data.Response === 'True') {
+      apiCache.set(cacheKey, data);
+    }
+    return data;
+  } catch (error: any) {
+    if (error?.response?.status === 401) {
+      // Return false response quietly so the application gracefully falls back to the curated dataset
+      return { Response: 'False', Error: 'OMDb API Key invalid or limit reached.' };
+    }
+    throw error;
   }
-  return data;
 };
+
 
 // ─── Helper Mappers ────────────────────────────────────────────────────────
 export const imdbIdToNumber = (imdbId: string | undefined): number => {
@@ -672,8 +681,10 @@ export const omdbApi = {
       const data = await cachedGet({ s: query, page, type: 'movie' });
       
       if (!data || data.Response === 'False' || !data.Search) {
-        return createPaginatedResponse([]);
+        const filtered = CURATED_DB.filter(m => m.Title.toLowerCase().includes(query.toLowerCase())).map(mapOmdbToMovie);
+        return createPaginatedResponse(filtered);
       }
+
 
       // Parallel detailing to get complete records (overview, votes, IMDb rating)
       const results = await Promise.all(

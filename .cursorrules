@@ -1,0 +1,71 @@
+# Cine AI — God-Level UI Transformation Rules
+
+This configuration serves as the master UI and UX transformation system instructions for all LLMs, code editors, and AI agents collaborating on the "Cine AI" project.
+
+---
+
+## 🎨 Core Mandate
+Transform the existing React Native + Expo frontend into an elite, startup-grade, "App Store Featured" level experience with immersive animations and luxury visual depth while **absolutely preserving** the underlying architecture, routing, stores, and backend integrations.
+
+---
+
+## 🏗️ Technical Constraints
+*   **DO NOT** modify backend APIs (`cineai-backend`).
+*   **DO NOT** replace or rewrite the Zustand state managers (`useAuthStore`, `useChatStore`, `useWatchlistStore`).
+*   **DO NOT** rewrite React Navigation setups or core screens.
+*   **DO NOT** introduce Tailwind CSS or utility-first frameworks. Always use vanilla React Native `StyleSheet.create`.
+*   **DO** use **React Native Reanimated (v3/v4)** for premium physics, spring haptics, and fluid gestures.
+*   **DO** utilize premium visual tools: `expo-blur` (glassmorphism), `expo-linear-gradient` (luxury lighting), and `expo-haptics` (tactile responses).
+
+---
+
+## 🌈 Visual & Style Token System
+
+### Colors & Surfaces
+*   **OLED Background:** `#09090B` (pure dark obsidian backdrop)
+*   **Surface Standard:** `#111114` (layered depth flat card backgrounds)
+*   **Elevated Surface:** `#18181C` (foreground widgets/prominent items)
+*   **Luxury Glass Surface:** `rgba(255, 255, 255, 0.06)` with Blur Intensity `30-50`
+*   **Borders/Dividers:** `rgba(255, 255, 255, 0.08)` (ultra-thin sleek framing)
+
+### Premium Accents & Lighting
+*   **Royal Purple:** Epic AI actions, mystical curves.
+*   **Electric Blue:** Digital feedback, status glowing.
+*   **Cinema Red:** Action items, brand warmth, hero actions.
+*   **Amber Glow:** Ratings, gold status, movie accolades.
+
+---
+
+## 📐 Typography Hierarchy (Outfit & Inter)
+*   Hero items must use oversized, bold typography with a heavy weight and wider letter spacing (`letterSpacing: 0.5`).
+*   Incorporate high-contrast sizing to enforce vertical rhythm. Avoid flat font-size relationships (e.g., contrast `48px` titles against a micro-text metadata string of `11px`).
+*   Leverage breathing room: Always ensure generous padding values to avoid squished text components.
+
+---
+
+## 🌀 Motion & Gesture Systems
+Every component must feel organic, springy, and premium.
+1.  **Spring Mechanics:** Use spring configurations with standard UI stiffness/damping values (`stiffness: 300, damping: 15` or similar) to ensure immediate responsiveness.
+2.  **Shared Element Transitions:** Seamless navigation animations between listing item posters and details page backdrops.
+3.  **Dynamic Scroll Interpolation:** Animate list header transparency, scroll offsets, and poster size scale states based on the native layout scroll position.
+4.  **Tactile Haptics:** Inject `Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light)` into standard interactions (tabs, chip selectors, buttons, voice waveforms).
+
+---
+
+## 📲 Screen Transformations
+
+### 1. Immersive Bottom Dock Navigator
+*   **Style:** Translucent floating pill floating over the view with blur backdrop.
+*   **Interactions:** Micro-scaling icons on press, hidden on down-scroll and floating back up on up-scroll.
+
+### 2. Immersive Hero Home Screen
+*   **Showcase:** Oversized marquee featured card with layered ambient radial gradient glow overlays matching the primary poster color.
+*   **Layout:** Smooth custom horizontal chip carousels, layered movie rows with parallax scrolling and subtle border glow highlights.
+
+### 3. Movie Details Masterpiece
+*   **Layout:** Parallax collapsing header with full-screen blurred background poster.
+*   **Widgets:** Floating metadata glassmorphic cards, custom cast list carousels, interactive trailer sections, and custom AI insights widget cards.
+
+### 4. Interactive Conversational Film Critic
+*   **Style:** Elegant conversational interface that feels like a messaging service with an elite AI advisor, rather than a generic utility chatbot.
+*   **Visuals:** Premium bubble gradients, beautifully formatted custom embedded movie card recommendations, and glowing wave ambient status states while thinking or dictating.

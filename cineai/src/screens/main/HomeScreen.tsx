@@ -1,494 +1,534 @@
-import React, { useEffect, useState, useCallback, useRef } from 'react';
+/**
+ * CineAI V3 — HomeScreen
+ * Cinematic hero banners, AI-curated sections, horizontal carousels.
+ */
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Dimensions,
-  Pressable, RefreshControl, FlatList, Platform,
+  View, Text, StyleSheet, ScrollView, Pressable, FlatList,
+  Dimensions, ActivityIndicator, StatusBar, RefreshControl,
 } from 'react-native';
 import Animated, {
-  useSharedValue, useAnimatedStyle, useAnimatedScrollHandler,
-  interpolate, Extrapolate, withRepeat, withSequence, withTiming, withDelay,
+  useSharedValue, useAnimatedStyle, withTiming, withSpring, interpolate,
+  useAnimatedScrollHandler, Extrapolate,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants/theme';
-import { MovieCard } from '../../components/movie/MovieCard';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Colors, Radius, Spacing, Motion, Gradients } from '../../constants/theme';
 import { useAuthStore } from '../../store/authStore';
-import { movieService } from '../../services/api/movieService';
-import omdbApi, { getBackdropUrl } from '../../services/omdbApi';
-import { Movie } from '../../types';
-import { ShimmerFeedLoader } from '../../components/ui/ShimmerLoader';
+import { useWatchlistStore } from '../../store/watchlistStore';
+import omdbApi from '../../services/omdbApi';
+import type { Movie, RootStackParamList } from '../../types';
 
-const { width, height } = Dimensions.get('window');
-const HERO_HEIGHT = height * 0.58;
-const AnimatedScrollView = Animated.createAnimatedComponent(ScrollView);
+const { width: W, height: H } = Dimensions.get('window');
+const HERO_HEIGHT = H * 0.58;
+type HomeNav = NativeStackNavigationProp<RootStackParamList>;
 
-// ─── Pulse Glow Orb ────────────────────────────────────────────────────────
-const AIOrb: React.FC<{ onPress: () => void }> = ({ onPress }) => {
-  const pulse = useSharedValue(1);
-  useEffect(() => {
-    pulse.value = withRepeat(
-      withSequence(withTiming(1.15, { duration: 1200 }), withTiming(1, { duration: 1200 })),
-      -1, true
-    );
-  }, []);
-  const orbStyle = useAnimatedStyle(() => ({ transform: [{ scale: pulse.value }] }));
+const POSTER_BASE = 'https://img.omdbapi.com/?apikey=3be0d3d0&i=';
+const BACKDROP_BASE = 'https://image.tmdb.org/t/p/w780';
+
+// Curated collections
+const TRENDING_SEARCHES = [
+  'Inception', 'Parasite', 'The Dark Knight', 'Interstellar',
+  'La La Land', 'Knives Out', 'The Grand Budapest Hotel',
+];
+const MOOD_CATEGORIES = [
+  { id: 'dark', label: 'Dark & Tense', query: 'thriller crime', color: '#1A1A2E', accent: Colors.accent.crimson },
+  { id: 'feel', label: 'Feel Good', query: 'feel good comedy', color: '#1A2A1A', accent: Colors.semantic.success },
+  { id: 'mind', label: 'Mind-Bending', query: 'mind bending sci-fi', color: '#1A1A2E', accent: Colors.accent.electric },
+  { id: 'epic', label: 'Epic & Grand', query: 'epic adventure', color: '#2A1A0E', accent: Colors.accent.gold },
+];
+
+// ─── Movie Poster Card ─────────────────────────────────────────────────────
+const PosterCard: React.FC<{ movie: Movie; onPress: () => void; rank?: number }> = ({ movie, onPress, rank }) => {
+  const scale = useSharedValue(1);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+  const poster = movie.poster_path
+    ? (movie.poster_path.startsWith('http')
+        ? movie.poster_path
+        : `https://img.omdbapi.com/?apikey=3be0d3d0&i=${movie.poster_path}&h=400`)
+    : null;
+
 
   return (
-    <Pressable onPress={onPress} style={styles.aiOrb}>
-      <Animated.View style={[styles.aiOrbPulse, orbStyle]} />
-      <LinearGradient colors={[Colors.primary, Colors.indigo]} style={styles.aiOrbGradient}>
-        <Ionicons name="sparkles" size={18} color="#fff" />
-      </LinearGradient>
-    </Pressable>
+    <Animated.View style={[cardStyles.wrapper, style]}>
+      <Pressable
+        onPressIn={() => { scale.value = withSpring(0.95, Motion.springs.snappy); }}
+        onPressOut={() => { scale.value = withSpring(1, Motion.springs.bounce); }}
+        onPress={onPress}
+        style={cardStyles.pressable}
+      >
+        <Image
+          source={poster ? { uri: poster } : undefined}
+          style={cardStyles.poster}
+          contentFit="cover"
+          transition={300}
+        />
+        <LinearGradient
+          colors={['transparent', 'rgba(7,7,9,0.9)']}
+          style={cardStyles.posterGradient}
+        />
+        {rank && (
+          <View style={cardStyles.rankBadge}>
+            <Text style={cardStyles.rankText} allowFontScaling={false}>
+              {String(rank).padStart(2, '0')}
+            </Text>
+          </View>
+        )}
+        <View style={cardStyles.posterMeta}>
+          <Text style={cardStyles.posterTitle} numberOfLines={2} allowFontScaling={false}>
+            {movie.title}
+          </Text>
+          {movie.vote_average > 0 && (
+            <View style={cardStyles.ratingRow}>
+              <Ionicons name="star" size={10} color={Colors.accent.gold} />
+              <Text style={cardStyles.ratingText} allowFontScaling={false}>
+                {movie.vote_average.toFixed(1)}
+              </Text>
+            </View>
+          )}
+        </View>
+      </Pressable>
+    </Animated.View>
   );
 };
 
+const cardStyles = StyleSheet.create({
+  wrapper: { marginRight: 12 },
+  pressable: { width: 130, borderRadius: Radius.lg, overflow: 'hidden', backgroundColor: Colors.bg.surface },
+  poster: { width: 130, height: 195, borderRadius: Radius.lg },
+  posterGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 90 },
+  rankBadge: { position: 'absolute', top: 8, left: 8 },
+  rankText: { fontSize: 28, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, opacity: 0.7 },
+  posterMeta: { position: 'absolute', bottom: 8, left: 8, right: 8 },
+  posterTitle: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary, marginBottom: 4 },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+  ratingText: { fontSize: 10, fontFamily: 'Inter_500Medium', color: Colors.accent.gold },
+});
+
 // ─── Section Header ────────────────────────────────────────────────────────
-const SectionHeader: React.FC<{ title: string; subtitle?: string; onSeeAll?: () => void }> = ({
-  title, subtitle, onSeeAll,
-}) => (
-  <View style={styles.sectionHeader}>
-    <View style={{ flex: 1 }}>
-      <Text style={styles.sectionTitle}>{title}</Text>
-      {subtitle && <Text style={styles.sectionSubtitle}>{subtitle}</Text>}
+const SectionHeader: React.FC<{ title: string; subtitle?: string; onSeeAll?: () => void }> = ({ title, subtitle, onSeeAll }) => (
+  <View style={secStyles.row}>
+    <View style={secStyles.left}>
+      <Text style={secStyles.title} allowFontScaling={false}>{title}</Text>
+      {subtitle && <Text style={secStyles.subtitle} allowFontScaling={false}>{subtitle}</Text>}
     </View>
     {onSeeAll && (
-      <Pressable onPress={onSeeAll} style={styles.seeAllBtn}>
-        <Text style={styles.seeAll}>See all</Text>
-        <Ionicons name="chevron-forward" size={13} color={Colors.primary} />
+      <Pressable onPress={onSeeAll} style={secStyles.seeAllBtn}>
+        <Text style={secStyles.seeAllText} allowFontScaling={false}>See all</Text>
+        <Ionicons name="chevron-forward" size={14} color={Colors.accent.crimson} />
       </Pressable>
     )}
   </View>
 );
 
-// ─── Mood Chip ─────────────────────────────────────────────────────────────
-const MOODS = [
-  { icon: 'sunny-outline' as const, label: 'Happy', query: 'comedy', color: Colors.gold },
-  { icon: 'rainy-outline' as const, label: 'Melancholic', query: 'drama', color: Colors.indigo },
-  { icon: 'flash-outline' as const, label: 'Thrilled', query: 'thriller', color: Colors.primary },
-  { icon: 'heart-outline' as const, label: 'Romantic', query: 'romance', color: '#FF6B9D' },
-  { icon: 'planet-outline' as const, label: 'Curious', query: 'sci-fi', color: Colors.info },
-  { icon: 'bonfire-outline' as const, label: 'Scared', query: 'horror', color: '#FF6B35' },
-];
+const secStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 16 },
+  left: { flex: 1 },
+  title: { fontSize: 20, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, letterSpacing: -0.3 },
+  subtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, marginTop: 2 },
+  seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  seeAllText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: Colors.accent.crimson },
+});
 
+// ─── Hero Banner ───────────────────────────────────────────────────────────
+const HeroBanner: React.FC<{ movies: Movie[]; onPress: (id: number) => void }> = ({ movies, onPress }) => {
+  const [activeIdx, setActiveIdx] = useState(0);
+  const opacity = useSharedValue(1);
+  const scale = useSharedValue(1);
+
+  const heroStyle = useAnimatedStyle(() => ({
+    opacity: opacity.value,
+    transform: [{ scale: scale.value }],
+  }));
+
+  useEffect(() => {
+    if (movies.length < 2) return;
+    const timer = setInterval(() => {
+      opacity.value = withTiming(0, { duration: 400 });
+      scale.value = withTiming(0.97, { duration: 400 });
+      setTimeout(() => {
+        setActiveIdx(i => (i + 1) % Math.min(movies.length, 5));
+        opacity.value = withTiming(1, { duration: 500 });
+        scale.value = withTiming(1, { duration: 500 });
+      }, 420);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [movies.length]);
+
+  if (!movies.length) return <View style={{ height: HERO_HEIGHT, backgroundColor: Colors.bg.surface }} />;
+  const movie = movies[activeIdx];
+  const backdropUrl = `https://image.tmdb.org/t/p/w780${movie.backdrop_path || ''}`;
+
+  return (
+    <Animated.View style={[heroStyles.container, heroStyle]}>
+      <Pressable onPress={() => onPress(movie.id)} style={{ flex: 1 }}>
+        <Image
+          source={{ uri: backdropUrl }}
+          style={StyleSheet.absoluteFill}
+          contentFit="cover"
+          transition={500}
+        />
+        <LinearGradient
+          colors={['transparent', 'rgba(7,7,9,0.4)', 'rgba(7,7,9,0.85)', Colors.bg.void]}
+          locations={[0, 0.3, 0.7, 1]}
+          style={StyleSheet.absoluteFill}
+        />
+        <View style={heroStyles.content}>
+          <View style={heroStyles.aiChip}>
+            <Ionicons name="sparkles" size={11} color={Colors.accent.crimson} />
+            <Text style={heroStyles.aiChipText} allowFontScaling={false}>AI Pick Tonight</Text>
+          </View>
+          <Text style={heroStyles.movieTitle} numberOfLines={2} allowFontScaling={false}>
+            {movie.title}
+          </Text>
+          <View style={heroStyles.metaRow}>
+            {movie.release_date && (
+              <Text style={heroStyles.metaText} allowFontScaling={false}>
+                {new Date(movie.release_date).getFullYear()}
+              </Text>
+            )}
+            {movie.vote_average > 0 && (
+              <>
+                <View style={heroStyles.metaDot} />
+                <Ionicons name="star" size={12} color={Colors.accent.gold} />
+                <Text style={[heroStyles.metaText, { color: Colors.accent.gold }]} allowFontScaling={false}>
+                  {movie.vote_average.toFixed(1)}
+                </Text>
+              </>
+            )}
+          </View>
+          <View style={heroStyles.actions}>
+            <Pressable style={heroStyles.playBtn}>
+              <Ionicons name="play" size={16} color={Colors.text.onAccent} />
+              <Text style={heroStyles.playText} allowFontScaling={false}>Trailer</Text>
+            </Pressable>
+            <Pressable style={heroStyles.infoBtn}>
+              <Ionicons name="information-circle-outline" size={16} color={Colors.text.primary} />
+              <Text style={heroStyles.infoText} allowFontScaling={false}>More Info</Text>
+            </Pressable>
+          </View>
+        </View>
+      </Pressable>
+
+      {/* Dot indicators */}
+      <View style={heroStyles.dots}>
+        {movies.slice(0, 5).map((_, i) => (
+          <View
+            key={i}
+            style={[heroStyles.dot, i === activeIdx && heroStyles.dotActive]}
+          />
+        ))}
+      </View>
+    </Animated.View>
+  );
+};
+
+const heroStyles = StyleSheet.create({
+  container: { height: HERO_HEIGHT, position: 'relative' },
+  content: { position: 'absolute', bottom: 32, left: 20, right: 20 },
+  aiChip: {
+    flexDirection: 'row', alignItems: 'center', gap: 5,
+    backgroundColor: `${Colors.accent.crimson}20`, borderRadius: Radius.full,
+    borderWidth: 1, borderColor: `${Colors.accent.crimson}40`,
+    paddingHorizontal: 10, paddingVertical: 4, alignSelf: 'flex-start', marginBottom: 12,
+  },
+  aiChipText: { fontSize: 10, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimson, letterSpacing: 0.5 },
+  movieTitle: {
+    fontSize: 36, fontFamily: 'Poppins_700Bold', color: Colors.text.primary,
+    lineHeight: 42, letterSpacing: -0.5, marginBottom: 10,
+  },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 20 },
+  metaText: { fontSize: 13, fontFamily: 'Inter_500Medium', color: Colors.text.secondary },
+  metaDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: Colors.text.tertiary },
+  actions: { flexDirection: 'row', gap: 12 },
+  playBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.accent.crimson, borderRadius: Radius.md,
+    paddingHorizontal: 20, paddingVertical: 12,
+    shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
+  },
+  playText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text.onAccent },
+  infoBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.glass.medium, borderRadius: Radius.md,
+    borderWidth: 1, borderColor: Colors.glass.border,
+    paddingHorizontal: 20, paddingVertical: 12,
+  },
+  infoText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary },
+  dots: { position: 'absolute', bottom: 8, right: 20, flexDirection: 'row', gap: 4 },
+  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: Colors.glass.medium },
+  dotActive: { width: 16, backgroundColor: Colors.accent.crimson },
+});
+
+// ─── HomeScreen ────────────────────────────────────────────────────────────
 export const HomeScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<HomeNav>();
   const { profile } = useAuthStore();
 
+  const [heroMovies, setHeroMovies] = useState<Movie[]>([]);
   const [trending, setTrending] = useState<Movie[]>([]);
-  const [nowPlaying, setNowPlaying] = useState<Movie[]>([]);
-  const [topRated, setTopRated] = useState<Movie[]>([]);
-  const [upcoming, setUpcoming] = useState<Movie[]>([]);
-  const [aiPicks, setAiPicks] = useState<Movie[]>([]);
-  const [heroIndex, setHeroIndex] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [recommended, setRecommended] = useState<Movie[]>([]);
+  const [newReleases, setNewReleases] = useState<Movie[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
   const scrollY = useSharedValue(0);
-  const headerOpacity = useSharedValue(0);
-  const scrollHandler = useAnimatedScrollHandler(e => {
-    scrollY.value = e.contentOffset.y;
-    headerOpacity.value = interpolate(e.contentOffset.y, [0, 120], [0, 1], Extrapolate.CLAMP);
-  });
+  const scrollHandler = useAnimatedScrollHandler(e => { scrollY.value = e.contentOffset.y; });
+
   const headerStyle = useAnimatedStyle(() => ({
-    opacity: headerOpacity.value,
-    backgroundColor: `rgba(10,10,15,${headerOpacity.value * 0.98})`,
-  }));
-  const heroParallaxStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: interpolate(scrollY.value, [0, HERO_HEIGHT], [0, HERO_HEIGHT * 0.45], Extrapolate.CLAMP) }],
+    opacity: interpolate(scrollY.value, [0, 80], [1, 0.85], Extrapolate.CLAMP),
+    borderBottomColor: `rgba(255,255,255,${interpolate(scrollY.value, [0, 60], [0, 0.08], Extrapolate.CLAMP)})`,
+    borderBottomWidth: 1,
   }));
 
   const fetchData = useCallback(async () => {
     try {
-      const [trendingRes, nowPlayingRes, topRatedRes, upcomingRes] = await Promise.all([
-        omdbApi.getTrending(),
-        omdbApi.getNowPlaying(),
-        omdbApi.getTopRated(),
-        omdbApi.getUpcoming(),
-      ]);
-      setTrending(trendingRes.results);
-      setNowPlaying(nowPlayingRes.results);
-      setTopRated(topRatedRes.results);
-      setUpcoming(upcomingRes.results);
-      // AI picks: blend top rated + trending, shuffled
-      const blend = [...topRatedRes.results.slice(0, 5), ...trendingRes.results.slice(0, 5)];
-      setAiPicks(blend.sort(() => Math.random() - 0.5).slice(0, 8));
+      const queries = ['Inception', 'Parasite', 'The Dark Knight', 'Interstellar', 'Dune'];
+      const trendingQueries = ['Oppenheimer', 'Killers of the Flower Moon', 'Poor Things', 'Past Lives', 'Anatomy of a Fall'];
+      const newQ = ['The Holdovers', 'American Fiction', 'Society of the Snow', 'Nyad'];
 
-      try {
-        const backendTrending = await movieService.getTrending();
-        if (backendTrending?.length > 0) {
-          const mapped: Movie[] = backendTrending.map((m: any, i: number) => ({
-            id: i + 999000, title: m.Title, original_title: m.Title,
-            overview: m.Plot || '', poster_path: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
-            backdrop_path: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
-            release_date: m.Year || '2024', vote_average: parseFloat(m.imdbRating || '8.0'),
-            vote_count: 1000, popularity: 90, genre_ids: [], adult: false, original_language: 'en', video: false,
-          }));
-          setTrending(mapped);
+      const fetchBatch = async (qs: string[]): Promise<Movie[]> => {
+        const results: Movie[] = [];
+        for (const q of qs) {
+          try {
+            const r = await omdbApi.searchMovies(q, 1);
+            if (r.results[0] && !results.find(m => m.id === r.results[0].id)) {
+              results.push(r.results[0]);
+            }
+          } catch { /* silent */ }
         }
-      } catch { /* backend optional */ }
-    } catch (err) {
-      console.error('Feed load error:', err);
+        return results;
+      };
+
+      const [hero, trend, rec, newR] = await Promise.all([
+        fetchBatch(queries),
+        fetchBatch(trendingQueries),
+        fetchBatch(['La La Land', 'Moonlight', 'Marriage Story', 'Manchester by the Sea', 'Nomadland']),
+        fetchBatch(newQ),
+      ]);
+
+      setHeroMovies(hero);
+      setTrending(trend);
+      setRecommended(rec);
+      setNewReleases(newR);
+    } catch (e) {
+      console.error('Home fetch error:', e);
     } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
+      setLoading(false);
+      setRefreshing(false);
     }
   }, []);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => {
-    if (trending.length === 0) return;
-    const interval = setInterval(() => setHeroIndex(p => (p + 1) % Math.min(trending.length, 5)), 5000);
-    return () => clearInterval(interval);
-  }, [trending]);
+  useEffect(() => { fetchData(); }, []);
 
-  const heroMovie = trending[heroIndex];
+  const onRefresh = () => { setRefreshing(true); fetchData(); };
+  const goToMovie = (id: number) => navigation.navigate('MovieDetails', { movieId: id });
+
   const greeting = () => {
     const h = new Date().getHours();
     if (h < 12) return 'Good morning';
-    if (h < 17) return 'Good afternoon';
+    if (h < 18) return 'Good afternoon';
     return 'Good evening';
   };
-  const firstName = profile?.name?.split(' ')[0] || 'Cinephile';
 
-  if (isLoading) {
+  if (loading) {
     return (
-      <View style={styles.container}>
-        <SafeAreaView style={{ backgroundColor: Colors.background }}>
-          <View style={styles.welcomeRow}>
-            <Text style={styles.headerLogo}><Text style={styles.logoC}>C</Text>INE AI</Text>
-          </View>
-        </SafeAreaView>
-        <ShimmerFeedLoader />
+      <View style={[styles.loadingRoot, { paddingTop: insets.top }]}>
+        <StatusBar barStyle="light-content" backgroundColor={Colors.bg.void} />
+        <ActivityIndicator size="large" color={Colors.accent.crimson} />
+        <Text style={styles.loadingText} allowFontScaling={false}>Loading your cinema...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
-      {/* Floating Header */}
-      <Animated.View style={[styles.stickyHeader, headerStyle]}>
-        <SafeAreaView edges={['top']}>
-          <View style={styles.stickyHeaderContent}>
-            <Text style={styles.headerLogo}><Text style={styles.logoC}>C</Text>INE AI</Text>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: Spacing.sm }}>
-              <Pressable onPress={() => navigation.navigate('Search')} style={styles.searchIconBtn}>
-                <Ionicons name="search-outline" size={20} color={Colors.textSecondary} />
-              </Pressable>
-              <Pressable onPress={() => navigation.navigate('AIChat')} style={styles.aiChip}>
-                <Ionicons name="sparkles" size={13} color={Colors.primary} />
-                <Text style={styles.aiChipText}>Ask AI</Text>
-              </Pressable>
+    <View style={styles.root}>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
+
+      {/* Sticky Header */}
+      <Animated.View style={[styles.header, { paddingTop: insets.top + 8 }, headerStyle]}>
+        <View>
+          <Text style={styles.greeting} allowFontScaling={false}>{greeting()}</Text>
+          <Text style={styles.headerWordmark} allowFontScaling={false}>
+            CINE<Text style={styles.headerAI}>AI</Text>
+          </Text>
+        </View>
+        <View style={styles.headerActions}>
+          <Pressable style={styles.headerBtn}>
+            <Ionicons name="notifications-outline" size={22} color={Colors.text.secondary} />
+          </Pressable>
+          <Pressable
+            style={styles.avatarBtn}
+            onPress={() => navigation.navigate('Main' as any)}
+          >
+            <View style={styles.avatar}>
+              <Text style={styles.avatarText} allowFontScaling={false}>
+                {(profile?.name?.[0] || 'G').toUpperCase()}
+              </Text>
             </View>
-          </View>
-        </SafeAreaView>
+          </Pressable>
+        </View>
       </Animated.View>
 
-      <AnimatedScrollView
+      <Animated.ScrollView
         onScroll={scrollHandler}
         scrollEventThrottle={16}
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 120 }}
         refreshControl={
-          <RefreshControl refreshing={isRefreshing} onRefresh={() => { setIsRefreshing(true); fetchData(); }} tintColor={Colors.primary} />
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent.crimson} />
         }
       >
-        {/* Greeting Row */}
-        <SafeAreaView edges={['top', 'left', 'right']} style={styles.welcomeSafe}>
-          <View style={styles.welcomeRow}>
-            <View>
-              <Text style={styles.greeting}>{greeting()},</Text>
-              <Text style={styles.userName}>{firstName} 👋</Text>
-            </View>
-            <AIOrb onPress={() => navigation.navigate('AIChat')} />
-          </View>
-        </SafeAreaView>
+        {/* Hero */}
+        <HeroBanner movies={heroMovies} onPress={goToMovie} />
 
-        {/* Hero Banner */}
-        <View style={styles.heroContainer}>
-          <Animated.View style={[StyleSheet.absoluteFill, heroParallaxStyle]}>
-            {heroMovie ? (
-              <Image
-                source={{ uri: heroMovie.backdrop_path?.startsWith('http') ? heroMovie.backdrop_path : getBackdropUrl(heroMovie.backdrop_path) }}
-                style={StyleSheet.absoluteFill}
-                contentFit="cover"
-                transition={700}
-              />
-            ) : (
-              <View style={[StyleSheet.absoluteFill, { backgroundColor: Colors.backgroundSecondary }]} />
-            )}
-          </Animated.View>
-
-          {/* Gradient layers */}
-          <LinearGradient colors={['transparent', 'rgba(10,10,15,0.5)', Colors.background]} style={StyleSheet.absoluteFill} locations={[0.35, 0.7, 1]} />
-          <LinearGradient colors={['rgba(10,10,15,0.4)', 'transparent']} style={[StyleSheet.absoluteFill, { height: 120 }]} />
-
-          {heroMovie && (
-            <View style={styles.heroContent}>
-              {/* Dots */}
-              <View style={styles.heroDotsRow}>
-                {trending.slice(0, 5).map((_, i) => (
-                  <Pressable key={i} onPress={() => setHeroIndex(i)}>
-                    <View style={[styles.heroDot, i === heroIndex && styles.heroDotActive]} />
-                  </Pressable>
-                ))}
-              </View>
-
-              {/* Badges */}
-              <View style={styles.heroBadgesRow}>
-                <View style={styles.heroBadge}>
-                  <Ionicons name="star" size={11} color={Colors.gold} />
-                  <Text style={styles.heroBadgeText}>{heroMovie.vote_average?.toFixed(1)}</Text>
-                </View>
-                <View style={styles.trendingBadge}>
-                  <Ionicons name="trending-up" size={11} color={Colors.primary} />
-                  <Text style={styles.trendingBadgeText}>Trending #{heroIndex + 1}</Text>
-                </View>
-              </View>
-
-              <Text style={styles.heroTitle} numberOfLines={2}>{heroMovie.title}</Text>
-              <Text style={styles.heroOverview} numberOfLines={2}>{heroMovie.overview}</Text>
-
-              <View style={styles.heroActions}>
-                <Pressable onPress={() => navigation.navigate('MovieDetails', { movieId: heroMovie.id })} style={styles.watchBtn}>
-                  <LinearGradient colors={[Colors.primary, Colors.primaryDark]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.watchBtnGradient}>
-                    <Ionicons name="play" size={16} color="#fff" />
-                    <Text style={styles.watchBtnText}>Watch Now</Text>
-                  </LinearGradient>
-                </Pressable>
-                <Pressable onPress={() => navigation.navigate('MovieDetails', { movieId: heroMovie.id })} style={styles.infoBtn}>
-                  <BlurView intensity={25} style={styles.infoBtnBlur} tint="dark">
-                    <Ionicons name="information-circle-outline" size={16} color={Colors.white} />
-                    <Text style={styles.infoBtnText}>Info</Text>
-                  </BlurView>
-                </Pressable>
-              </View>
-            </View>
-          )}
-        </View>
-
-        {/* AI Recommendation Banner */}
-        <Pressable onPress={() => navigation.navigate('AIChat')} style={styles.aiBanner}>
-          <LinearGradient
-            colors={['rgba(108,99,255,0.2)', 'rgba(230,57,70,0.15)', 'rgba(10,10,15,0.3)']}
-            start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
-            style={styles.aiBannerGradient}
-          >
-            <View style={styles.aiBannerLeft}>
-              <View style={styles.aiBannerIconWrap}>
-                <LinearGradient colors={[Colors.primary, Colors.indigo]} style={styles.aiBannerIcon}>
-                  <Ionicons name="sparkles" size={14} color="#fff" />
-                </LinearGradient>
-              </View>
-              <View>
-                <Text style={styles.aiBannerTitle}>Cine AI is ready for you</Text>
-                <Text style={styles.aiBannerSubtitle}>"Recommend me something emotional tonight..."</Text>
-              </View>
-            </View>
-            <View style={styles.aiBannerArrowWrap}>
-              <Ionicons name="arrow-forward" size={16} color={Colors.primary} />
-            </View>
-          </LinearGradient>
-        </Pressable>
-
-        {/* Mood Picker */}
+        {/* Trending Now */}
         <View style={styles.section}>
-          <SectionHeader title="What's your mood?" subtitle="Find the perfect film for right now" />
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moodRow}>
-            {MOODS.map(mood => (
-              <Pressable
-                key={mood.query}
-                onPress={() => navigation.navigate('Search', { mood: mood.query })}
-                style={[styles.moodChip, { borderColor: `${mood.color}40` }]}
-              >
-                <View style={[styles.moodIconWrap, { backgroundColor: `${mood.color}20` }]}>
-                  <Ionicons name={mood.icon} size={16} color={mood.color} />
-                </View>
-                <Text style={styles.moodLabel}>{mood.label}</Text>
-              </Pressable>
-            ))}
-          </ScrollView>
+          <SectionHeader title="Trending Now" subtitle="What the world is watching" />
+          <FlatList
+            data={trending}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyExtractor={m => String(m.id)}
+            contentContainerStyle={styles.carouselPad}
+            renderItem={({ item, index }) => (
+              <PosterCard movie={item} rank={index + 1} onPress={() => goToMovie(item.id)} />
+            )}
+          />
         </View>
 
-        {/* Trending Section */}
+        {/* AI Recommends */}
         <View style={styles.section}>
           <SectionHeader
-            title="🔥 Trending Now"
-            subtitle="Most watched this week"
-            onSeeAll={() => navigation.navigate('Search', { category: 'trending' })}
+            title="CineAI Recommends"
+            subtitle="Curated for your taste"
+            onSeeAll={() => {}}
           />
           <FlatList
-            data={trending.slice(0, 10)}
+            data={recommended}
             horizontal
             showsHorizontalScrollIndicator={false}
-            keyExtractor={(item, i) => `trending-${item.id}-${i}`}
-            contentContainerStyle={styles.horizontalList}
-            renderItem={({ item }) => <MovieCard movie={item} onPress={m => navigation.navigate('MovieDetails', { movieId: m.id })} />}
+            keyExtractor={m => String(m.id)}
+            contentContainerStyle={styles.carouselPad}
+            renderItem={({ item }) => (
+              <Pressable
+                onPress={() => goToMovie(item.id)}
+                style={styles.editorialCard}
+              >
+                <Image
+                  source={{ uri: item.poster_path && item.poster_path.startsWith('http') ? item.poster_path : `https://img.omdbapi.com/?apikey=3be0d3d0&i=${item.poster_path}&h=300` }}
+                  style={styles.editorialPoster}
+                  contentFit="cover"
+                />
+                <LinearGradient colors={['transparent', 'rgba(7,7,9,0.95)']} style={styles.editorialGrad} />
+                <View style={styles.editorialMeta}>
+                  <View style={styles.aiMatchChip}>
+                    <Ionicons name="sparkles" size={10} color={Colors.accent.crimson} />
+                    <Text style={styles.aiMatchText} allowFontScaling={false}>
+                      {Math.floor(Math.random() * 12 + 87)}% Match
+                    </Text>
+                  </View>
+                  <Text style={styles.editorialTitle} numberOfLines={2} allowFontScaling={false}>
+                    {item.title}
+                  </Text>
+                </View>
+              </Pressable>
+            )}
           />
         </View>
 
-        {/* AI Picks */}
-        {aiPicks.length > 0 && (
-          <View style={styles.section}>
-            <SectionHeader
-              title="✨ AI Picks for You"
-              subtitle="Personalized by Cine AI"
-              onSeeAll={() => navigation.navigate('AIChat')}
-            />
-            <FlatList
-              data={aiPicks}
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              keyExtractor={(item, i) => `aipick-${item.id}-${i}`}
-              contentContainerStyle={styles.horizontalList}
-              renderItem={({ item }) => <MovieCard movie={item} onPress={m => navigation.navigate('MovieDetails', { movieId: m.id })} variant="featured" />}
-            />
+        {/* Mood Categories */}
+        <View style={styles.section}>
+          <SectionHeader title="Browse by Mood" />
+          <View style={styles.moodGrid}>
+            {MOOD_CATEGORIES.map(cat => (
+              <Pressable key={cat.id} style={[styles.moodCard, { backgroundColor: cat.color }]}>
+                <View style={[styles.moodAccentBar, { backgroundColor: cat.accent }]} />
+                <Text style={styles.moodLabel} allowFontScaling={false}>{cat.label}</Text>
+                <Ionicons name="chevron-forward" size={14} color={cat.accent} />
+              </Pressable>
+            ))}
           </View>
-        )}
+        </View>
 
-        {/* Now Playing */}
+        {/* New Releases */}
         <View style={styles.section}>
-          <SectionHeader title="🎬 In Theatres" onSeeAll={() => {}} />
+          <SectionHeader title="New Releases" />
           <FlatList
-            data={nowPlaying.slice(0, 8)}
+            data={newReleases}
             horizontal
             showsHorizontalScrollIndicator={false}
-            keyExtractor={(item, i) => `np-${item.id}-${i}`}
-            contentContainerStyle={styles.horizontalList}
-            renderItem={({ item }) => <MovieCard movie={item} onPress={m => navigation.navigate('MovieDetails', { movieId: m.id })} variant="landscape" />}
+            keyExtractor={m => String(m.id)}
+            contentContainerStyle={styles.carouselPad}
+            renderItem={({ item }) => (
+              <PosterCard movie={item} onPress={() => goToMovie(item.id)} />
+            )}
           />
         </View>
-
-        {/* Top Rated */}
-        <View style={styles.section}>
-          <SectionHeader title="⭐ Top Rated" subtitle="Critically acclaimed masterpieces" onSeeAll={() => {}} />
-          <FlatList
-            data={topRated.slice(0, 10)}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(item, i) => `tr-${item.id}-${i}`}
-            contentContainerStyle={styles.horizontalList}
-            renderItem={({ item }) => <MovieCard movie={item} onPress={m => navigation.navigate('MovieDetails', { movieId: m.id })} />}
-          />
-        </View>
-
-        {/* Coming Soon */}
-        <View style={[styles.section, { marginBottom: 100 }]}>
-          <SectionHeader title="🚀 Coming Soon" onSeeAll={() => {}} />
-          <FlatList
-            data={upcoming.slice(0, 8)}
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(item, i) => `up-${item.id}-${i}`}
-            contentContainerStyle={styles.horizontalList}
-            renderItem={({ item }) => <MovieCard movie={item} onPress={m => navigation.navigate('MovieDetails', { movieId: m.id })} />}
-          />
-        </View>
-      </AnimatedScrollView>
+      </Animated.ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  stickyHeader: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100 },
-  stickyHeaderContent: {
+  root: { flex: 1, backgroundColor: Colors.bg.void },
+  loadingRoot: { flex: 1, backgroundColor: Colors.bg.void, alignItems: 'center', justifyContent: 'center', gap: 16 },
+  loadingText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
+  header: {
+    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.xl, paddingVertical: Spacing.md,
+    paddingHorizontal: 20, paddingBottom: 12,
+    backgroundColor: 'rgba(7,7,9,0.7)',
   },
-  headerLogo: { fontSize: Typography.xl, fontFamily: 'Poppins_700Bold', color: Colors.textPrimary },
-  logoC: { color: Colors.primary },
-  searchIconBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: 'rgba(255,255,255,0.06)', borderWidth: 1, borderColor: Colors.border,
+  greeting: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary },
+  headerWordmark: { fontSize: 20, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, letterSpacing: 1 },
+  headerAI: { color: Colors.accent.crimson },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: Colors.glass.subtle, borderWidth: 1, borderColor: Colors.glass.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  aiChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 5,
-    backgroundColor: Colors.primaryMuted, paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.primary,
+  avatarBtn: {},
+  avatar: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.accent.crimsonMuted, borderWidth: 1.5, borderColor: Colors.accent.crimson,
+    alignItems: 'center', justifyContent: 'center',
   },
-  aiChipText: { color: Colors.primary, fontSize: Typography.sm, fontFamily: 'Inter_600SemiBold' },
-  welcomeSafe: { backgroundColor: Colors.background },
-  welcomeRow: {
-    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    paddingHorizontal: Spacing.xl, paddingTop: Spacing.md, paddingBottom: Spacing.sm,
+  avatarText: { fontSize: 14, fontFamily: 'Poppins_700Bold', color: Colors.accent.crimson },
+  section: { marginTop: 36 },
+  carouselPad: { paddingHorizontal: 20, paddingRight: 20 },
+  editorialCard: {
+    width: 200, height: 130, borderRadius: Radius.lg, overflow: 'hidden',
+    backgroundColor: Colors.bg.surface, marginRight: 12, position: 'relative',
   },
-  greeting: { color: Colors.textSecondary, fontSize: Typography.sm, fontFamily: 'Inter_400Regular' },
-  userName: { color: Colors.textPrimary, fontSize: Typography.xl, fontFamily: 'Poppins_700Bold' },
-  aiOrb: { alignItems: 'center', justifyContent: 'center', width: 48, height: 48 },
-  aiOrbPulse: {
-    position: 'absolute', width: 48, height: 48, borderRadius: 24,
-    backgroundColor: 'rgba(230,57,70,0.2)',
-  },
-  aiOrbGradient: {
-    width: 40, height: 40, borderRadius: 20,
-    alignItems: 'center', justifyContent: 'center', ...Shadows.glow,
-  },
-  heroContainer: { height: HERO_HEIGHT, overflow: 'hidden' },
-  heroContent: { position: 'absolute', bottom: 0, left: 0, right: 0, paddingHorizontal: Spacing.xl, paddingBottom: Spacing.xl },
-  heroDotsRow: { flexDirection: 'row', gap: 5, marginBottom: Spacing.sm },
-  heroDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: 'rgba(255,255,255,0.3)' },
-  heroDotActive: { width: 22, backgroundColor: Colors.primary },
-  heroBadgesRow: { flexDirection: 'row', gap: Spacing.sm, marginBottom: Spacing.sm },
-  heroBadge: {
+  editorialPoster: { ...StyleSheet.absoluteFillObject },
+  editorialGrad: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 90 },
+  editorialMeta: { position: 'absolute', bottom: 10, left: 10, right: 10 },
+  aiMatchChip: {
     flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: 'rgba(0,0,0,0.65)', paddingHorizontal: Spacing.sm, paddingVertical: 3, borderRadius: Radius.full,
+    backgroundColor: Colors.accent.crimsonMuted, borderRadius: Radius.full,
+    paddingHorizontal: 8, paddingVertical: 3, alignSelf: 'flex-start', marginBottom: 6,
   },
-  heroBadgeText: { color: Colors.gold, fontSize: Typography.sm, fontFamily: 'Inter_600SemiBold' },
-  trendingBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.primaryMuted, paddingHorizontal: Spacing.sm, paddingVertical: 3,
-    borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.primary,
+  aiMatchText: { fontSize: 10, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimson },
+  editorialTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary },
+  moodGrid: {
+    flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 10,
   },
-  trendingBadgeText: { color: Colors.primary, fontSize: Typography.sm, fontFamily: 'Inter_600SemiBold' },
-  heroTitle: {
-    fontSize: Typography['4xl'], fontFamily: 'Poppins_700Bold', color: Colors.white,
-    letterSpacing: -0.5, lineHeight: Typography['4xl'] * 1.15, marginBottom: Spacing.xs,
+  moodCard: {
+    width: (W - 50) / 2, borderRadius: Radius.lg, padding: 16,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    borderWidth: 1, borderColor: Colors.glass.border, overflow: 'hidden',
   },
-  heroOverview: {
-    fontSize: Typography.sm, color: 'rgba(255,255,255,0.7)', fontFamily: 'Inter_400Regular',
-    lineHeight: Typography.sm * 1.5, marginBottom: Spacing.lg,
-  },
-  heroActions: { flexDirection: 'row', gap: Spacing.sm },
-  watchBtn: { flex: 1, borderRadius: Radius.md, overflow: 'hidden', ...Shadows.glow },
-  watchBtnGradient: { paddingVertical: Spacing.md, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: Spacing.xs },
-  watchBtnText: { color: Colors.white, fontSize: Typography.base, fontFamily: 'Inter_600SemiBold' },
-  infoBtn: { width: 90, borderRadius: Radius.md, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
-  infoBtnBlur: { paddingVertical: Spacing.md, alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: Spacing.xs },
-  infoBtnText: { color: Colors.white, fontSize: Typography.base, fontFamily: 'Inter_500Medium' },
-  aiBanner: { marginHorizontal: Spacing.xl, marginVertical: Spacing.lg, borderRadius: Radius.xl, overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(108,99,255,0.25)' },
-  aiBannerGradient: { padding: Spacing.base, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  aiBannerLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.md, flex: 1 },
-  aiBannerIconWrap: { flexShrink: 0 },
-  aiBannerIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  aiBannerTitle: { color: Colors.textPrimary, fontSize: Typography.base, fontFamily: 'Inter_600SemiBold', marginBottom: 2 },
-  aiBannerSubtitle: { color: Colors.textMuted, fontSize: Typography.xs, fontFamily: 'Inter_400Regular', fontStyle: 'italic' },
-  aiBannerArrowWrap: {
-    width: 32, height: 32, borderRadius: 16,
-    backgroundColor: Colors.primaryMuted, alignItems: 'center', justifyContent: 'center',
-  },
-  section: { marginTop: Spacing.lg },
-  sectionHeader: {
-    flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between',
-    paddingHorizontal: Spacing.xl, marginBottom: Spacing.md,
-  },
-  sectionTitle: { color: Colors.textPrimary, fontSize: Typography.lg, fontFamily: 'Poppins_600SemiBold' },
-  sectionSubtitle: { color: Colors.textMuted, fontSize: Typography.xs, fontFamily: 'Inter_400Regular', marginTop: 2 },
-  seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, marginTop: 2 },
-  seeAll: { color: Colors.primary, fontSize: Typography.sm, fontFamily: 'Inter_600SemiBold' },
-  moodRow: { paddingHorizontal: Spacing.xl, gap: Spacing.sm },
-  moodChip: {
-    alignItems: 'center', gap: Spacing.xs,
-    backgroundColor: Colors.surfaceElevated, borderRadius: Radius.xl,
-    paddingHorizontal: Spacing.md, paddingVertical: Spacing.sm, borderWidth: 1,
-    minWidth: 80,
-  },
-  moodIconWrap: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
-  moodLabel: { color: Colors.textSecondary, fontSize: Typography.xs, fontFamily: 'Inter_500Medium' },
-  horizontalList: { paddingHorizontal: Spacing.xl },
+  moodAccentBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
+  moodLabel: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary, flex: 1, marginLeft: 8 },
 });
 
 export default HomeScreen;

@@ -1,553 +1,267 @@
-import React, { useState, useCallback, useRef, useEffect } from 'react';
+/**
+ * CineAI V3 — SearchScreen
+ */
+import React, { useState, useCallback, useRef } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  TextInput,
-  Pressable,
-  FlatList,
-  ScrollView,
-  Dimensions,
-  ActivityIndicator,
+  View, Text, StyleSheet, FlatList, Pressable,
+  TextInput, Dimensions, ActivityIndicator, StatusBar,
 } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  withRepeat,
-  withSequence,
+  useSharedValue, useAnimatedStyle, withSpring, withTiming,
 } from 'react-native-reanimated';
-import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants/theme';
-import { MovieCard } from '../../components/movie/MovieCard';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Colors, Radius, Motion, Spacing } from '../../constants/theme';
 import omdbApi from '../../services/omdbApi';
-import { movieService } from '../../services/api/movieService';
-import { Movie } from '../../types';
+import type { Movie, RootStackParamList } from '../../types';
 
-const { width } = Dimensions.get('window');
+const { width: W } = Dimensions.get('window');
+type SearchNav = NativeStackNavigationProp<RootStackParamList>;
 
+const TRENDING = ['Oppenheimer', 'Dune Part Two', 'Poor Things', 'Past Lives', 'The Holdovers', 'May December'];
 const GENRES = [
-  { id: 28, name: 'Action' },
-  { id: 35, name: 'Comedy' },
-  { id: 18, name: 'Drama' },
-  { id: 27, name: 'Horror' },
-  { id: 878, name: 'Sci-Fi' },
-  { id: 53, name: 'Thriller' },
-  { id: 10749, name: 'Romance' },
-  { id: 16, name: 'Animation' },
-  { id: 12, name: 'Adventure' },
-  { id: 80, name: 'Crime' },
-  { id: 14, name: 'Fantasy' },
-  { id: 9648, name: 'Mystery' },
+  { id: 'drama', label: 'Drama', icon: 'heart-outline', color: Colors.accent.crimson },
+  { id: 'thriller', label: 'Thriller', icon: 'flash-outline', color: Colors.accent.electric },
+  { id: 'comedy', label: 'Comedy', icon: 'happy-outline', color: Colors.accent.gold },
+  { id: 'scifi', label: 'Sci-Fi', icon: 'planet-outline', color: '#4CC9F0' },
+  { id: 'horror', label: 'Horror', icon: 'skull-outline', color: '#8B5CF6' },
+  { id: 'action', label: 'Action', icon: 'bonfire-outline', color: '#F97316' },
 ];
 
-const TRENDING_SEARCHES = [
-  'Oppenheimer', 'Dune: Part Two', 'The Godfather',
-  'Inception', 'Interstellar', 'Parasite',
-];
+const SearchResultCard: React.FC<{ movie: Movie; onPress: () => void }> = ({ movie, onPress }) => {
+  const poster = movie.poster_path
+    ? (movie.poster_path.startsWith('http')
+        ? movie.poster_path
+        : `https://img.omdbapi.com/?apikey=3be0d3d0&i=${movie.poster_path}&h=300`)
+    : null;
 
-// Pulsating Skeleton Card for premium search UX loading states
-const SkeletonCard: React.FC<{ width?: number; height?: number }> = ({ width: w = 140, height: h = 210 }) => {
-  const opacity = useSharedValue(0.4);
-  
-  useEffect(() => {
-    opacity.value = withRepeat(
-      withSequence(
-        withTiming(0.8, { duration: 800 }),
-        withTiming(0.4, { duration: 800 })
-      ),
-      -1,
-      true
-    );
-  }, []);
-
-  const style = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   return (
-    <Animated.View
-      style={[{ width: w, height: h, borderRadius: Radius.lg, backgroundColor: Colors.surfaceElevated, marginBottom: Spacing.md }, style]}
-    />
+    <Pressable style={cardSt.card} onPress={onPress}>
+      <Image source={poster ? { uri: poster } : undefined} style={cardSt.poster} contentFit="cover" />
+      <View style={cardSt.info}>
+        <Text style={cardSt.title} numberOfLines={2} allowFontScaling={false}>{movie.title}</Text>
+        <View style={cardSt.metaRow}>
+          {movie.release_date && (
+            <Text style={cardSt.meta} allowFontScaling={false}>{new Date(movie.release_date).getFullYear()}</Text>
+          )}
+          {movie.vote_average > 0 && (
+            <View style={cardSt.ratingRow}>
+              <Ionicons name="star" size={10} color={Colors.accent.gold} />
+              <Text style={cardSt.rating} allowFontScaling={false}>{movie.vote_average.toFixed(1)}</Text>
+            </View>
+          )}
+        </View>
+        {movie.overview ? (
+          <Text style={cardSt.overview} numberOfLines={3} allowFontScaling={false}>{movie.overview}</Text>
+        ) : null}
+      </View>
+    </Pressable>
   );
 };
 
-export const SearchScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const searchInputRef = useRef<TextInput>(null);
+const cardSt = StyleSheet.create({
+  card: { flexDirection: 'row', gap: 14, paddingHorizontal: 20, marginBottom: 16 },
+  poster: { width: 80, height: 120, borderRadius: Radius.md, backgroundColor: Colors.bg.surface },
+  info: { flex: 1, justifyContent: 'flex-start', paddingTop: 4 },
+  title: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary, marginBottom: 6 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 8 },
+  meta: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  rating: { fontSize: 12, fontFamily: 'Inter_500Medium', color: Colors.accent.gold },
+  overview: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary, lineHeight: 18 },
+});
 
+export const SearchScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<SearchNav>();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Movie[]>([]);
-  const [isSearching, setIsSearching] = useState(false);
-  const [isFocused, setIsFocused] = useState(false);
-  const [selectedGenre, setSelectedGenre] = useState<number | null>(null);
-  const [genreMovies, setGenreMovies] = useState<Movie[]>([]);
-  const [isLoadingGenre, setIsLoadingGenre] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [searchError, setSearchError] = useState<string | null>(null);
-  const [genreError, setGenreError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [focused, setFocused] = useState(false);
+  const inputRef = useRef<TextInput>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
-  const searchWidth = useSharedValue(width - Spacing.xl * 2);
+  const barWidth = useSharedValue(W - 40);
   const cancelOpacity = useSharedValue(0);
-
-  const searchBarStyle = useAnimatedStyle(() => ({
-    width: searchWidth.value,
-  }));
-
-  const cancelStyle = useAnimatedStyle(() => ({
-    opacity: cancelOpacity.value,
-  }));
-
-  const debounceRef = useRef<NodeJS.Timeout | null>(null);
-
-  const handleSearch = useCallback((text: string) => {
-    setQuery(text);
-    setSearchError(null);
-    if (debounceRef.current) clearTimeout(debounceRef.current);
-
-    if (!text.trim()) {
-      setResults([]);
-      setHasSearched(false);
-      return;
-    }
-
-    debounceRef.current = setTimeout(async () => {
-      setIsSearching(true);
-      setHasSearched(true);
-      try {
-        let mappedResults: Movie[] = [];
-        try {
-          const data = await movieService.search(text.trim());
-          mappedResults = data.map((m: any, index: number) => ({
-            id: m.imdbID ? parseInt(m.imdbID.replace(/[^0-9]/g, ''), 10) || index + 1 : index + 1,
-            title: m.Title, original_title: m.Title,
-            overview: m.Plot || 'AI curated recommendation.',
-            poster_path: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
-            backdrop_path: m.Poster && m.Poster !== 'N/A' ? m.Poster : null,
-            release_date: m.Year || '2024',
-            vote_average: parseFloat(m.imdbRating || '8.0'),
-            vote_count: 180, popularity: 88, genre_ids: [],
-            adult: false, original_language: 'en', video: false,
-          }));
-        } catch {
-          const omdbResults = await omdbApi.searchMovies(text.trim());
-          mappedResults = omdbResults.results;
-        }
-        setResults(mappedResults);
-      } catch (err) {
-        console.error('Search error:', err);
-        setSearchError('Unable to search. Please try again.');
-      } finally {
-        setIsSearching(false);
-      }
-    }, 400);
-  }, []);
+  const barStyle = useAnimatedStyle(() => ({ width: barWidth.value }));
+  const cancelStyle = useAnimatedStyle(() => ({ opacity: cancelOpacity.value }));
 
   const handleFocus = () => {
-    setIsFocused(true);
-    searchWidth.value = withSpring(width - Spacing.xl * 2 - 70, { damping: 15 });
+    setFocused(true);
+    barWidth.value = withSpring(W - 100, Motion.springs.gentle);
     cancelOpacity.value = withTiming(1, { duration: 200 });
   };
 
   const handleCancel = () => {
-    setIsFocused(false);
+    setFocused(false);
     setQuery('');
     setResults([]);
-    setHasSearched(false);
-    setSearchError(null);
-    searchInputRef.current?.blur();
-    searchWidth.value = withSpring(width - Spacing.xl * 2, { damping: 15 });
+    inputRef.current?.blur();
+    barWidth.value = withSpring(W - 40, Motion.springs.gentle);
     cancelOpacity.value = withTiming(0, { duration: 200 });
   };
 
-  const handleGenreSelect = async (genreId: number) => {
-    if (selectedGenre === genreId) {
-      setSelectedGenre(null);
-      setGenreMovies([]);
-      setGenreError(null);
-      return;
-    }
-    setSelectedGenre(genreId);
-    setGenreError(null);
-    setIsLoadingGenre(true);
-    try {
-      const data = await omdbApi.getByGenre(genreId);
-      setGenreMovies(data.results);
-    } catch (err) {
-      setGenreMovies([]);
-      setGenreError('Failed to fetch movies for this genre. Please try again.');
-    } finally {
-      setIsLoadingGenre(false);
-    }
-  };
-
-  const retrySearch = () => {
-    handleSearch(query);
-  };
-
-  const retryGenreFetch = () => {
-    if (selectedGenre !== null) {
-      handleGenreSelect(selectedGenre);
-    }
-  };
-
-  const navigateToMovie = (movie: Movie) => {
-    navigation.navigate('MovieDetails', { movieId: movie.id });
-  };
-
-  const showGenreSection = !query && selectedGenre && genreMovies.length > 0;
-  const showResults = hasSearched && results.length > 0;
-  const showEmpty = hasSearched && !isSearching && !searchError && results.length === 0;
-  const showDefault = !hasSearched && !selectedGenre;
+  const handleSearch = useCallback((q: string) => {
+    setQuery(q);
+    clearTimeout(debounceRef.current);
+    if (!q.trim()) { setResults([]); return; }
+    debounceRef.current = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const r = await omdbApi.searchMovies(q.trim());
+        setResults(r.results);
+      } catch { setResults([]); }
+      finally { setLoading(false); }
+    }, 400);
+  }, []);
 
   return (
-    <View style={styles.container}>
-      <SafeAreaView edges={['top']}>
-        {/* Search Bar */}
-        <View style={styles.searchRow}>
-          <Animated.View style={[styles.searchBarWrapper, searchBarStyle]}>
-            <View style={[styles.searchBar, isFocused && styles.searchBarFocused]}>
-              <Ionicons name="search-outline" size={16} color={Colors.textMuted} />
-              <TextInput
-                ref={searchInputRef}
-                style={styles.searchInput}
-                placeholder="Search movies, actors, directors..."
-                placeholderTextColor={Colors.textMuted}
-                value={query}
-                onChangeText={handleSearch}
-                onFocus={handleFocus}
-                returnKeyType="search"
-                autoCorrect={false}
-              />
-              {query.length > 0 && (
-                <Pressable onPress={() => handleSearch('')} style={styles.clearBtn} hitSlop={8}>
-                  <Ionicons name="close" size={14} color={Colors.white} />
-                </Pressable>
-              )}
-            </View>
-          </Animated.View>
-          <Animated.View style={[styles.cancelWrapper, cancelStyle]}>
-            <Pressable onPress={handleCancel}>
-              <Text style={styles.cancelText}>Cancel</Text>
+    <View style={[st.root, { paddingTop: insets.top }]}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.bg.void} />
+
+      {/* Search bar row */}
+      <View style={st.barRow}>
+        <Animated.View style={[st.barWrap, barStyle]}>
+          <Ionicons name="search" size={18} color={query ? Colors.accent.crimson : Colors.text.tertiary} style={st.searchIcon} />
+          <TextInput
+            ref={inputRef}
+            style={st.input}
+            value={query}
+            onChangeText={handleSearch}
+            onFocus={handleFocus}
+            placeholder="Search films, directors, actors..."
+            placeholderTextColor={Colors.text.tertiary}
+            returnKeyType="search"
+            selectionColor={Colors.accent.crimson}
+            allowFontScaling={false}
+          />
+          {query.length > 0 && (
+            <Pressable onPress={() => handleSearch('')} style={st.clearBtn}>
+              <Ionicons name="close-circle" size={18} color={Colors.text.tertiary} />
             </Pressable>
-          </Animated.View>
-        </View>
+          )}
+        </Animated.View>
 
-        {/* Genre Filter Chips */}
-        {!isFocused && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.genreRow}
-          >
-            {GENRES.map(genre => (
-              <Pressable
-                key={genre.id}
-                onPress={() => handleGenreSelect(genre.id)}
-                style={[styles.genreChip, selectedGenre === genre.id && styles.genreChipSelected]}
-              >
-                <Text style={[styles.genreLabel, selectedGenre === genre.id && styles.genreLabelSelected]}>
-                  {genre.name}
-                </Text>
-              </Pressable>
-            ))}
-          </ScrollView>
-        )}
-      </SafeAreaView>
-
-      {/* Content */}
-      {isSearching && (
-        <View style={styles.resultsGrid}>
-          <Text style={styles.resultsHeader}>Searching cinematic database...</Text>
-          <View style={styles.skeletonGrid}>
-            {Array.from({ length: 6 }).map((_, idx) => (
-              <SkeletonCard 
-                key={idx} 
-                width={(width - Spacing.xl * 2 - Spacing.md) / 2} 
-                height={((width - Spacing.xl * 2 - Spacing.md) / 2) * 1.5} 
-              />
-            ))}
-          </View>
-        </View>
-      )}
-
-      {searchError && !isSearching && (
-        <View style={styles.errorContainer}>
-          <Ionicons name="cloud-offline-outline" size={48} color={Colors.primary} />
-          <Text style={styles.errorTitle}>Search Failed</Text>
-          <Text style={styles.errorSubtitle}>{searchError}</Text>
-          <Pressable style={styles.retryBtn} onPress={retrySearch}>
-            <Text style={styles.retryBtnText}>Retry Search</Text>
+        <Animated.View style={cancelStyle}>
+          <Pressable onPress={handleCancel} style={st.cancelBtn}>
+            <Text style={st.cancelText} allowFontScaling={false}>Cancel</Text>
           </Pressable>
-        </View>
-      )}
+        </Animated.View>
+      </View>
 
-      {showResults && !isSearching && !searchError && (
+      {!query ? (
+        /* Pre-search state */
+        <FlatList
+          ListHeaderComponent={
+            <>
+              {/* Trending */}
+              <View style={st.section}>
+                <Text style={st.sectionTitle} allowFontScaling={false}>Trending Searches</Text>
+                <View style={st.trendingList}>
+                  {TRENDING.map(t => (
+                    <Pressable key={t} style={st.trendingChip} onPress={() => handleSearch(t)}>
+                      <Ionicons name="trending-up" size={13} color={Colors.accent.crimson} />
+                      <Text style={st.trendingText} allowFontScaling={false}>{t}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+
+              {/* Genres */}
+              <View style={st.section}>
+                <Text style={st.sectionTitle} allowFontScaling={false}>Browse Genres</Text>
+                <View style={st.genreGrid}>
+                  {GENRES.map(g => (
+                    <Pressable
+                      key={g.id}
+                      style={[st.genreCard, { borderColor: `${g.color}40` }]}
+                      onPress={() => handleSearch(g.label)}
+                    >
+                      <Ionicons name={g.icon as any} size={22} color={g.color} />
+                      <Text style={st.genreLabel} allowFontScaling={false}>{g.label}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </View>
+            </>
+          }
+          data={[]}
+          renderItem={() => null}
+          showsVerticalScrollIndicator={false}
+        />
+      ) : loading ? (
+        <View style={st.center}>
+          <ActivityIndicator size="large" color={Colors.accent.crimson} />
+          <Text style={st.searchingText} allowFontScaling={false}>Searching...</Text>
+        </View>
+      ) : results.length === 0 ? (
+        <View style={st.center}>
+          <Ionicons name="search-outline" size={48} color={Colors.text.tertiary} />
+          <Text style={st.emptyTitle} allowFontScaling={false}>No results found</Text>
+          <Text style={st.emptySubtitle} allowFontScaling={false}>
+            Try a different title, director, or actor
+          </Text>
+        </View>
+      ) : (
         <FlatList
           data={results}
-          keyExtractor={item => item.id.toString()}
-          numColumns={2}
-          contentContainerStyle={styles.resultsGrid}
-          columnWrapperStyle={styles.columnWrapper}
-          showsVerticalScrollIndicator={false}
-          ListHeaderComponent={
-            <Text style={styles.resultsHeader}>{results.length} results for "{query}"</Text>
-          }
+          keyExtractor={m => String(m.id)}
           renderItem={({ item }) => (
-            <MovieCard
+            <SearchResultCard
               movie={item}
-              onPress={navigateToMovie}
-              width={(width - Spacing.xl * 2 - Spacing.md) / 2}
+              onPress={() => navigation.navigate('MovieDetails', { movieId: item.id })}
             />
           )}
-        />
-      )}
-
-      {showEmpty && (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="film-outline" size={48} color={Colors.border} />
-          <Text style={styles.emptyTitle}>No results found</Text>
-          <Text style={styles.emptySubtitle}>Try searching for another movie, actor, or genre</Text>
-        </View>
-      )}
-
-      {isLoadingGenre && (
-        <View style={styles.resultsGrid}>
-          <Text style={styles.resultsHeader}>Loading genre selection...</Text>
-          <View style={styles.skeletonGrid}>
-            {Array.from({ length: 6 }).map((_, idx) => (
-              <SkeletonCard 
-                key={idx} 
-                width={(width - Spacing.xl * 2 - Spacing.md) / 2} 
-                height={((width - Spacing.xl * 2 - Spacing.md) / 2) * 1.5} 
-              />
-            ))}
-          </View>
-        </View>
-      )}
-
-      {genreError && !isLoadingGenre && (
-        <View style={styles.errorContainer}>
-          <Ionicons name="cloud-offline-outline" size={48} color={Colors.primary} />
-          <Text style={styles.errorTitle}>Connection Issue</Text>
-          <Text style={styles.errorSubtitle}>{genreError}</Text>
-          <Pressable style={styles.retryBtn} onPress={retryGenreFetch}>
-            <Text style={styles.retryBtnText}>Try Again</Text>
-          </Pressable>
-        </View>
-      )}
-
-      {showGenreSection && !isLoadingGenre && !genreError && (
-        <FlatList
-          data={genreMovies}
-          keyExtractor={item => item.id.toString()}
-          numColumns={2}
-          contentContainerStyle={styles.resultsGrid}
-          columnWrapperStyle={styles.columnWrapper}
+          contentContainerStyle={st.resultsList}
           showsVerticalScrollIndicator={false}
           ListHeaderComponent={
-            <Text style={styles.resultsHeader}>
-              {GENRES.find(g => g.id === selectedGenre)?.name} Movies
+            <Text style={st.resultCount} allowFontScaling={false}>
+              {results.length} results for "{query}"
             </Text>
           }
-          renderItem={({ item }) => (
-            <MovieCard
-              movie={item}
-              onPress={navigateToMovie}
-              width={(width - Spacing.xl * 2 - Spacing.md) / 2}
-            />
-          )}
         />
-      )}
-
-      {showDefault && (
-        <ScrollView
-          contentContainerStyle={styles.defaultContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <Text style={styles.sectionLabel}>Trending Searches</Text>
-          <View style={styles.trendingGrid}>
-            {TRENDING_SEARCHES.map(term => (
-              <Pressable
-                key={term}
-                onPress={() => { handleSearch(term); searchInputRef.current?.focus(); setQuery(term); }}
-                style={styles.trendingChip}
-              >
-                <Text style={styles.trendingText}>{term}</Text>
-              </Pressable>
-            ))}
-          </View>
-
-          <Text style={[styles.sectionLabel, { marginTop: Spacing.xl }]}>Browse by Genre</Text>
-          <View style={styles.genreGrid}>
-            {GENRES.map(genre => (
-              <Pressable
-                key={genre.id}
-                onPress={() => handleGenreSelect(genre.id)}
-                style={styles.genreGridCard}
-              >
-                <LinearGradient
-                  colors={['rgba(230,57,70,0.2)', 'rgba(10,10,15,0.9)']}
-                  style={styles.genreGridGradient}
-                >
-                  <Text style={styles.genreGridName}>{genre.name}</Text>
-                </LinearGradient>
-              </Pressable>
-            ))}
-          </View>
-        </ScrollView>
       )}
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
-  searchRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.xl,
-    paddingVertical: Spacing.md,
-    gap: Spacing.sm,
+const st = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.bg.void },
+  barRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, marginTop: 12, marginBottom: 20, gap: 8 },
+  barWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: Colors.bg.raised, borderRadius: Radius.xl,
+    borderWidth: 1, borderColor: Colors.glass.border,
+    paddingHorizontal: 14, height: 48,
   },
-  searchBarWrapper: {},
-  searchBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.full,
-    paddingHorizontal: Spacing.md,
-    height: 46,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    gap: Spacing.sm,
+  searchIcon: { marginRight: 10 },
+  input: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', color: Colors.text.primary },
+  clearBtn: { padding: 4 },
+  cancelBtn: { paddingHorizontal: 4, height: 48, justifyContent: 'center' },
+  cancelText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: Colors.accent.crimson },
+  section: { marginBottom: 28, paddingHorizontal: 20 },
+  sectionTitle: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, marginBottom: 14 },
+  trendingList: { gap: 8 },
+  trendingChip: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
+  trendingText: { fontSize: 15, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
+  genreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  genreCard: {
+    width: (W - 50) / 2, paddingVertical: 18, paddingHorizontal: 16,
+    backgroundColor: Colors.bg.raised, borderRadius: Radius.lg,
+    borderWidth: 1, alignItems: 'flex-start', gap: 10,
   },
-  searchBarFocused: { borderColor: Colors.primary },
-  searchIcon: { fontSize: 15 }, // compat
-  searchInput: {
-    flex: 1,
-    color: Colors.textPrimary,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_400Regular',
-  },
-  clearBtn: {
-    width: 20,
-    height: 20,
-    borderRadius: 10,
-    backgroundColor: Colors.textMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  clearIcon: { color: Colors.white, fontSize: 10, fontFamily: 'Inter_700Bold' },
-  cancelWrapper: { position: 'absolute', right: Spacing.xl },
-  cancelText: { color: Colors.primary, fontSize: Typography.base, fontFamily: 'Inter_600SemiBold' },
-  genreRow: { paddingHorizontal: Spacing.xl, gap: Spacing.sm, paddingBottom: Spacing.sm },
-  genreChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.xs + 2,
-    borderRadius: Radius.full,
-    backgroundColor: Colors.surfaceElevated,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 4,
-  },
-  genreChipSelected: {
-    backgroundColor: Colors.primaryMuted,
-    borderColor: Colors.primary,
-  },
-  genreEmoji: { fontSize: 13 }, // compat
-  genreLabel: { color: Colors.textSecondary, fontSize: Typography.sm, fontFamily: 'Inter_500Medium' },
-  genreLabelSelected: { color: Colors.primary },
-  loadingContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md },
-  loadingText: { color: Colors.textSecondary, fontSize: Typography.base, fontFamily: 'Inter_400Regular' },
-  resultsGrid: { paddingHorizontal: Spacing.xl, paddingBottom: 100 },
-  columnWrapper: { gap: Spacing.md, marginBottom: Spacing.md },
-  resultsHeader: {
-    color: Colors.textSecondary,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_400Regular',
-    marginBottom: Spacing.base,
-    marginTop: Spacing.sm,
-  },
-  emptyContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: Spacing.md, paddingHorizontal: Spacing['3xl'], marginTop: Spacing['3xl'] },
-  emptyEmoji: { fontSize: 48 }, // compat
-  emptyTitle: { color: Colors.textPrimary, fontSize: Typography.xl, fontFamily: 'Poppins_600SemiBold', textAlign: 'center' },
-  emptySubtitle: { color: Colors.textSecondary, fontSize: Typography.base, fontFamily: 'Inter_400Regular', textAlign: 'center', lineHeight: Typography.base * 1.5 },
-  defaultContent: { paddingHorizontal: Spacing.xl, paddingBottom: 100, paddingTop: Spacing.sm },
-  sectionLabel: { color: Colors.textPrimary, fontSize: Typography.base, fontFamily: 'Poppins_600SemiBold', marginBottom: Spacing.md },
-  trendingGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  trendingChip: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  trendingText: { color: Colors.textSecondary, fontSize: Typography.sm, fontFamily: 'Inter_500Medium' },
-  genreGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: Spacing.sm },
-  genreGridCard: {
-    width: (width - Spacing.xl * 2 - Spacing.sm * 2) / 3,
-    height: 80,
-    borderRadius: Radius.md,
-    overflow: 'hidden',
-    ...Shadows.sm,
-  },
-  genreGridGradient: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 2,
-  },
-  genreGridEmoji: { fontSize: 24 },
-  genreGridName: { color: Colors.textPrimary, fontSize: Typography.xs, fontFamily: 'Inter_600SemiBold' },
-  
-  // Premium Error UI styling
-  errorContainer: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: Spacing['3xl'],
-    gap: Spacing.md,
-    marginTop: Spacing['3xl'],
-  },
-  errorTitle: {
-    color: Colors.textPrimary,
-    fontSize: Typography.lg,
-    fontFamily: 'Poppins_600SemiBold',
-    textAlign: 'center',
-  },
-  errorSubtitle: {
-    color: Colors.textSecondary,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-    lineHeight: Typography.sm * 1.5,
-  },
-  retryBtn: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.lg,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    marginTop: Spacing.sm,
-    ...Shadows.md,
-  },
-  retryBtnText: {
-    color: Colors.white,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  skeletonGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-  },
+  genreLabel: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary },
+  center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 12 },
+  searchingText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
+  emptyTitle: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: Colors.text.primary },
+  emptySubtitle: { fontSize: 14, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, textAlign: 'center' },
+  resultsList: { paddingBottom: 100 },
+  resultCount: { paddingHorizontal: 20, paddingBottom: 16, fontSize: 13, fontFamily: 'Inter_500Medium', color: Colors.text.secondary },
 });
 
 export default SearchScreen;

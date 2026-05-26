@@ -1,1347 +1,870 @@
-import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
+/**
+ * CineAI V3 — AIChatScreen Spacing & Refinement Polish
+ * The absolute zenith of flagship mobile cinematic UX.
+ * Perfectly balanced floating inputs, micro-halos, and elegant layout scale.
+ */
+import React, { useState, useRef, useEffect } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  FlatList,
-  TextInput,
-  Pressable,
-  KeyboardAvoidingView,
-  Platform,
-  Dimensions,
-  ScrollView,
-  ActivityIndicator,
-  Keyboard,
-  Linking,
-  Alert,
+  View, Text, StyleSheet, FlatList, Pressable, TextInput,
+  KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, StatusBar,
+  Modal, ScrollView,
 } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withRepeat,
-  withSequence,
-  withSpring,
-  interpolate,
-  Extrapolate,
-  SharedValue,
+  useSharedValue, useAnimatedStyle, withSpring, withTiming, withRepeat,
+  withSequence, Easing,
 } from 'react-native-reanimated';
-import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
-import * as Speech from 'expo-speech';
+import { BlurView } from 'expo-blur';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants/theme';
+import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { Colors, Radius, Motion, Spacing } from '../../constants/theme';
 import { useChatStore } from '../../store/chatStore';
-import { useWatchlistStore } from '../../store/watchlistStore';
-import { getPosterUrl } from '../../services/omdbApi';
+import { useAuthStore } from '../../store/authStore';
+import type { ChatMessage, Movie, RootStackParamList } from '../../types';
 import { VoiceWave } from '../../components/ui/VoiceWave';
-import { Movie, ChatMessage } from '../../types';
 
-const { width, height } = Dimensions.get('window');
-const DRAWER_WIDTH = width * 0.82;
+const { width: W, height: H } = Dimensions.get('window');
+type ChatNav = NativeStackNavigationProp<RootStackParamList>;
 
-const QUICK_PROMPTS = [
-  { icon: 'film-outline', text: 'Dark psychological thrillers' },
-  { icon: 'happy-outline', text: 'Feel-good comedies tonight' },
-  { icon: 'planet-outline', text: 'Mind-bending sci-fi films' },
-  { icon: 'heart-outline', text: 'Romantic like The Notebook' },
-  { icon: 'globe-outline', text: 'Award-winning foreign films' },
-  { icon: 'trophy-outline', text: 'Best films of the decade' },
+const MOCK_SPEECH_PHRASES = [
+  'Recommend a highly immersive, futuristic sci-fi film with deep philosophical themes',
+  'What is a dark and tense psychological thriller with a massive plot twist?',
+  'Suggest a comforting, beautifully shot cinematic masterpiece for a quiet evening',
+  'I want a visually spectacular modern action adventure with great pacing',
 ];
 
-const MOCK_SPEECH_QUERIES = [
-  "Recommend some dark psychological thrillers with crazy plot twists",
-  "Suggest a feel-good comedy movie for tonight",
-  "Tell me about some mind-bending sci-fi movies like Interstellar",
-  "I want to watch a breathtaking cinematic masterpiece with beautiful visuals",
-  "Are there any award-winning foreign films you recommend?",
-  "Suggest a high-concept mystery movie that keeps me guessing till the end"
+const QUICK_MOOD_PILLS = [
+  { id: 'noir', label: 'Neo-Noir', icon: 'moon-outline' },
+  { id: 'cyber', label: 'Cyberpunk', icon: 'terminal-outline' },
+  { id: 'oscar', label: 'Oscar Gold', icon: 'trophy-outline' },
+  { id: 'indie', label: 'Indie Gems', icon: 'film-outline' },
+  { id: 'mind', label: 'Mind-Bend', icon: 'intellectual-outline' },
 ];
 
-// ─── Typing Indicator ──────────────────────────────────────────────────────
-const TypingIndicator: React.FC = React.memo(() => {
-  const dot1 = useSharedValue(0.3);
-  const dot2 = useSharedValue(0.3);
-  const dot3 = useSharedValue(0.3);
+const SUGGESTION_CHIPS = [
+  { id: '1', icon: 'shuffle', label: 'Surprise me', query: 'Recommend a film I wouldn\'t expect to love but probably will' },
+  { id: '2', icon: 'heart-outline', label: 'Match my mood', query: 'What should I watch based on a relaxed evening mood?' },
+  { id: '3', icon: 'trending-up', label: 'Top rated 2024', query: 'What are the best-reviewed films from 2024?' },
+  { id: '4', icon: 'bulb-outline', label: 'Mind-bending', query: 'I want a film that will make me question everything' },
+];
 
-  useEffect(() => {
-    const animate = (val: SharedValue<number>, delay: number) => {
-      setTimeout(() => {
-        val.value = withRepeat(
-          withSequence(
-            withTiming(1, { duration: 400 }),
-            withTiming(0.3, { duration: 400 }),
-          ),
-          -1,
-          false
-        );
-      }, delay);
-    };
-    animate(dot1, 0);
-    animate(dot2, 200);
-    animate(dot3, 400);
-  }, []);
-
-  const d1 = useAnimatedStyle(() => ({ opacity: dot1.value }));
-  const d2 = useAnimatedStyle(() => ({ opacity: dot2.value }));
-  const d3 = useAnimatedStyle(() => ({ opacity: dot3.value }));
-
-  return (
-    <View style={typingStyles.container}>
-      <View style={typingStyles.aiAvatar}>
-        <Ionicons name="sparkles" size={12} color={Colors.primary} />
-      </View>
-      <View style={typingStyles.bubble}>
-        <Animated.View style={[typingStyles.dot, d1]} />
-        <Animated.View style={[typingStyles.dot, d2]} />
-        <Animated.View style={[typingStyles.dot, d3]} />
-      </View>
-    </View>
-  );
-});
-
-const typingStyles = StyleSheet.create({
-  container: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: Spacing.sm,
+const PREVIEW_HIGHLIGHTS = [
+  {
+    id: 1,
+    title: 'Interstellar',
+    match: 98,
+    poster: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?w=500&auto=format&fit=crop&q=60',
+    desc: 'Space Odyssey',
+    movieId: 157336
   },
-  aiAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.primaryMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.primary,
+  {
+    id: 2,
+    title: 'Dune: Part Two',
+    match: 96,
+    poster: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=500&auto=format&fit=crop&q=60',
+    desc: 'Desert Epic',
+    movieId: 438631
   },
-  bubble: {
-    flexDirection: 'row',
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xl,
-    borderBottomLeftRadius: 4,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    gap: 6,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.primary,
-  },
-});
+  {
+    id: 3,
+    title: 'Everything Everywhere',
+    match: 94,
+    poster: 'https://images.unsplash.com/photo-1500485035595-cbe6f645feb1?w=500&auto=format&fit=crop&q=60',
+    desc: 'Multiverse Chaos',
+    movieId: 545611
+  }
+];
 
-// ─── Premium Tactile Suggestion Chip ───────────────────────────────────────
-interface SuggestionChipProps {
-  prompt: { icon: string; text: string };
-  onPress: () => void;
-}
-
-const SuggestionChip: React.FC<SuggestionChipProps> = React.memo(({ prompt, onPress }) => {
+// ─── Breathing Aura Rings for CineAI Orb ─────────────────────────────────────
+const PulseRing: React.FC<{ delay: number }> = ({ delay }) => {
   const scale = useSharedValue(1);
-
-  const handlePressIn = useCallback(() => {
-    scale.value = withSpring(0.96);
-  }, []);
-  const handlePressOut = useCallback(() => {
-    scale.value = withSpring(1);
-  }, []);
-
-  const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
-  }));
-
-  return (
-    <Animated.View style={[animatedStyle, { flex: 1 }]}>
-      <Pressable
-        onPress={onPress}
-        onPressIn={handlePressIn}
-        onPressOut={handlePressOut}
-        style={styles.quickPrompt}
-      >
-        <Ionicons name={prompt.icon as any} size={14} color={Colors.primary} />
-        <Text style={styles.quickPromptText} numberOfLines={1}>
-          {prompt.text}
-        </Text>
-      </Pressable>
-    </Animated.View>
-  );
-});
-
-// ─── Netflix + Letterboxd Recommendation Card ──────────────────────────────
-const RecommendationCard: React.FC<{ movie: Movie; onPress: (m: Movie) => void }> = React.memo(({ movie, onPress }) => {
-  if (!movie) return null;
-  const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlistStore();
-  const isSaved = isInWatchlist(movie.id);
-
-
-  const handleWatchlistPress = useCallback((e: any) => {
-    e.stopPropagation();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    if (isSaved) {
-      removeFromWatchlist(movie.id);
-    } else {
-      addToWatchlist(movie);
-    }
-  }, [isSaved, movie]);
-
-  const handlePlayTrailer = useCallback((e: any) => {
-    e.stopPropagation();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    const searchName = movie.original_title || movie.title;
-    Linking.openURL(`https://www.youtube.com/results?search_query=${encodeURIComponent(searchName + ' official trailer')}`).catch(() => {});
-  }, [movie]);
-
-  const handleCardPress = useCallback(() => {
-    onPress(movie);
-  }, [movie, onPress]);
-
-  return (
-    <Pressable onPress={handleCardPress} style={chatStyles.recCard}>
-      <Image
-        source={{ uri: getPosterUrl(movie.poster_path) }}
-        style={chatStyles.recPoster}
-        contentFit="cover"
-        transition={200}
-      />
-      <LinearGradient
-        colors={['transparent', 'rgba(10,10,15,0.7)', 'rgba(10,10,15,0.98)']}
-        style={StyleSheet.absoluteFill}
-      />
-      
-      <Pressable onPress={handleWatchlistPress} style={chatStyles.bookmarkBtn}>
-        <Ionicons 
-          name={isSaved ? "bookmark" : "bookmark-outline"} 
-          size={13} 
-          color={isSaved ? Colors.primary : Colors.white} 
-        />
-      </Pressable>
-
-      <View style={chatStyles.recInfo}>
-        <Text style={chatStyles.recTitle} numberOfLines={1}>{movie.title}</Text>
-        
-        <View style={chatStyles.recMetaRow}>
-          <Text style={chatStyles.recYear}>{movie.release_date?.split('-')[0] || 'N/A'}</Text>
-          <View style={chatStyles.recRating}>
-            <Ionicons name="star" size={10} color={Colors.gold} />
-            <Text style={chatStyles.recRatingText}>{movie.vote_average?.toFixed(1) || '0.0'}</Text>
-          </View>
-        </View>
-
-        <Text style={chatStyles.recDetails} numberOfLines={1}>
-          Match: {Math.floor(85 + (movie.vote_average || 0) * 1.5)}% • Cinematic
-        </Text>
-
-        <View style={chatStyles.recActionsRow}>
-          <Pressable onPress={handlePlayTrailer} style={chatStyles.trailerBtn}>
-            <Ionicons name="logo-youtube" size={11} color={Colors.white} />
-            <Text style={chatStyles.actionBtnText}>Trailer</Text>
-          </Pressable>
-          <Pressable onPress={handleCardPress} style={chatStyles.infoBtn}>
-            <Ionicons name="information-circle-outline" size={11} color={Colors.white} />
-            <Text style={chatStyles.actionBtnText}>Details</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Pressable>
-  );
-});
-
-const chatStyles = StyleSheet.create({
-  recCard: {
-    width: 154,
-    height: 236,
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.lg,
-    overflow: 'hidden',
-    marginRight: Spacing.md,
-    borderWidth: 1,
-    borderColor: Colors.borderSubtle,
-    ...Shadows.md,
-  },
-  recPoster: { ...StyleSheet.absoluteFillObject },
-  bookmarkBtn: {
-    position: 'absolute',
-    top: Spacing.xs + 2,
-    right: Spacing.xs + 2,
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: 'rgba(10,10,15,0.8)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.whiteAlpha10,
-    zIndex: 10,
-  },
-  recInfo: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    padding: Spacing.sm,
-  },
-  recTitle: {
-    color: Colors.white,
-    fontSize: Typography.xs + 1,
-    fontFamily: 'Inter_600SemiBold',
-    marginBottom: 2,
-  },
-  recMetaRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 3,
-  },
-  recYear: { color: Colors.textSecondary, fontSize: 10, fontFamily: 'Inter_400Regular' },
-  recRating: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-  },
-  recRatingText: { color: Colors.gold, fontSize: 10, fontFamily: 'Inter_600SemiBold' },
-  recDetails: {
-    color: Colors.textTertiary,
-    fontSize: 9,
-    fontFamily: 'Inter_400Regular',
-    marginBottom: Spacing.xs + 2,
-  },
-  recActionsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 4,
-  },
-  trailerBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-    backgroundColor: Colors.primary,
-    paddingVertical: 3,
-    borderRadius: Radius.xs,
-  },
-  infoBtn: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 2,
-    backgroundColor: Colors.surface,
-    paddingVertical: 3,
-    borderRadius: Radius.xs,
-    borderWidth: 1,
-    borderColor: Colors.border,
-  },
-  actionBtnText: {
-    color: Colors.white,
-    fontSize: 8,
-    fontFamily: 'Inter_600SemiBold',
-  },
-});
-
-// ─── Message Bubble ────────────────────────────────────────────────────────
-interface MessageBubbleProps {
-  message: ChatMessage;
-  onMoviePress: (m: Movie) => void;
-  isSpeaking: boolean;
-  onSpeakToggle: () => void;
-}
-
-const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({
-  message,
-  onMoviePress,
-  isSpeaking,
-  onSpeakToggle,
-}) => {
-  const isUser = message.role === 'user';
-  const scale = useSharedValue(0.9);
-  const opacity = useSharedValue(0);
+  const opacity = useSharedValue(0.45);
 
   useEffect(() => {
-    scale.value = withSpring(1, { damping: 15 });
-    opacity.value = withTiming(1, { duration: 250 });
+    const startAnimation = () => {
+      scale.value = withRepeat(
+        withSequence(
+          withTiming(1.65, { duration: 2500, easing: Easing.out(Easing.ease) }),
+          withTiming(1, { duration: 0 })
+        ),
+        -1,
+        false
+      );
+      opacity.value = withRepeat(
+        withSequence(
+          withTiming(0, { duration: 2500, easing: Easing.out(Easing.ease) }),
+          withTiming(0.45, { duration: 0 })
+        ),
+        -1,
+        false
+      );
+    };
+
+    const t = setTimeout(startAnimation, delay);
+    return () => clearTimeout(t);
   }, []);
 
-  const style = useAnimatedStyle(() => ({
+  const ringStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
     opacity: opacity.value,
   }));
 
-  return (
-    <Animated.View style={[styles.messageRow, isUser ? styles.messageRowUser : styles.messageRowAI, style]}>
-      {!isUser && (
-        <View style={styles.aiAvatar}>
-          <Ionicons name="sparkles" size={13} color={Colors.primary} />
-        </View>
-      )}
-      <View style={[styles.bubble, isUser ? styles.bubbleUser : styles.bubbleAI, { maxWidth: width * 0.78 }]}>
-        {isUser ? (
-          <Text style={[styles.bubbleText, styles.bubbleTextUser]}>{message.content}</Text>
-        ) : (
-          <View style={styles.bubbleHeaderRow}>
-            <Text style={[styles.bubbleText, { flex: 1 }]}>{message.content}</Text>
-            <Pressable onPress={onSpeakToggle} style={styles.speakIconBtn} hitSlop={8}>
-              <Ionicons
-                name={isSpeaking ? 'volume-mute-outline' : 'volume-medium-outline'}
-                size={16}
-                color={isSpeaking ? Colors.primary : Colors.textSecondary}
-              />
-            </Pressable>
-          </View>
-        )}
+  return <Animated.View style={[welcomeStyles.auraRing, ringStyle]} />;
+};
 
-        {/* Movie Recommendations List */}
-        {!isUser && message.movies && message.movies.length > 0 && (
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            style={styles.recsScroll}
-            contentContainerStyle={styles.recsContent}
-          >
-            {message.movies.map(rec => (
-              <RecommendationCard
-                key={rec.movie.id}
-                movie={rec.movie}
-                onPress={onMoviePress}
-              />
-            ))}
-          </ScrollView>
-        )}
-
-        {/* Mood Tags */}
-        {!isUser && message.movies && message.movies.length > 0 && message.movies[0]?.mood_tags && message.movies[0].mood_tags.length > 0 && (
-          <View style={styles.moodTagsRow}>
-            {message.movies[0].mood_tags.slice(0, 4).map(tag => (
-              <View key={tag} style={styles.moodTag}>
-                <Text style={styles.moodTagText}>{tag}</Text>
-              </View>
-            ))}
-          </View>
-        )}
-
-        <Text style={styles.timestamp}>
-          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-        </Text>
-      </View>
-    </Animated.View>
-  );
-});
-
-export const AIChatScreen: React.FC = () => {
-  const navigation = useNavigation<any>();
-  const { 
-    currentSession, 
-    sendMessage, 
-    isSending, 
-    clearCurrentSession, 
-    sessions, 
-    loadSessions, 
-    loadSession, 
-    deleteSession 
-  } = useChatStore();
-  
-  const [inputText, setInputText] = useState('');
-  const [speakingId, setSpeakingId] = useState<string | null>(null);
-  const [isListening, setIsListening] = useState(false);
-  const [wasVoiceRequest, setWasVoiceRequest] = useState(false);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [isKeyboardVisible, setKeyboardVisible] = useState(false);
-
-  const flatListRef = useRef<FlatList>(null);
-  const inputRef = useRef<TextInput>(null);
-  const recognitionRef = useRef<any>(null);
-  const typingTimeoutRef = useRef<any>(null);
-
-  // Animated Drawer Translation
-  const drawerTranslateX = useSharedValue(-DRAWER_WIDTH);
-  const micScale = useSharedValue(1);
-
-  const messages = currentSession?.messages || [];
+// ─── Typing Indicator ──────────────────────────────────────────────────────
+const TypingIndicator: React.FC = () => {
+  const d1 = useSharedValue(0);
+  const d2 = useSharedValue(0);
+  const d3 = useSharedValue(0);
 
   useEffect(() => {
-    loadSessions();
-    const keyboardDidShowListener = Keyboard.addListener(
-      'keyboardDidShow',
-      () => setKeyboardVisible(true)
-    );
-    const keyboardDidHideListener = Keyboard.addListener(
-      'keyboardDidHide',
-      () => setKeyboardVisible(false)
-    );
-
-    return () => {
-      Speech.stop().catch(() => {});
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-      if (typingTimeoutRef.current) {
-        clearTimeout(typingTimeoutRef.current);
-      }
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (_) {}
-      }
+    const animate = (sv: typeof d1, delay: number) => {
+      sv.value = withDelay(delay, withRepeat(withSequence(
+        withTiming(-6, { duration: 300 }),
+        withTiming(0, { duration: 300 }),
+      ), -1, false));
     };
+    const withDelay = (delay: number, anim: any) => {
+      return withSequence(withTiming(0, { duration: delay }), anim);
+    };
+    animate(d1, 0);
+    animate(d2, 150);
+    animate(d3, 300);
   }, []);
 
-  const bottomPadding = isKeyboardVisible 
-    ? (Platform.OS === 'ios' ? Spacing.sm : Spacing.xs)
-    : (Platform.OS === 'ios' ? 88 + Spacing.xs : 68 + Spacing.xs);
-
-  // Pulsating mic scale when listening
-  useEffect(() => {
-    if (isListening) {
-      micScale.value = withRepeat(
-        withSequence(
-          withTiming(1.15, { duration: 400 }),
-          withTiming(1.0, { duration: 400 }),
-        ),
-        -1,
-        true
-      );
-    } else {
-      micScale.value = 1;
-    }
-  }, [isListening]);
-
-  // Auto-play text-to-speech if the query was asked via voice
-  useEffect(() => {
-    if (messages.length > 0 && wasVoiceRequest && !isSending) {
-      const lastMessage = messages[messages.length - 1];
-      if (lastMessage.role !== 'user') {
-        const timer = setTimeout(() => {
-          handleSpeakToggle(lastMessage.id, lastMessage.content);
-        }, 500);
-        setWasVoiceRequest(false);
-        return () => clearTimeout(timer);
-      }
-    }
-  }, [messages, wasVoiceRequest, isSending]);
-
-  const toggleDrawer = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    const toValue = drawerOpen ? -DRAWER_WIDTH : 0;
-    drawerTranslateX.value = withSpring(toValue, { damping: 18, stiffness: 120 });
-    setDrawerOpen(!drawerOpen);
-  }, [drawerOpen]);
-
-  const closeDrawer = useCallback(() => {
-    if (drawerOpen) {
-      drawerTranslateX.value = withSpring(-DRAWER_WIDTH, { damping: 18, stiffness: 120 });
-      setDrawerOpen(false);
-    }
-  }, [drawerOpen]);
-
-  const handleSend = useCallback(async () => {
-    const text = inputText.trim();
-    if (!text || isSending) return;
-    setInputText('');
-    Keyboard.dismiss();
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    await sendMessage(text);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 150);
-  }, [inputText, isSending, sendMessage]);
-
-  const sendVoiceMessage = useCallback(async (text: string) => {
-    setWasVoiceRequest(true);
-    setInputText('');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    await sendMessage(text);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 150);
-  }, [sendMessage]);
-
-  const handleQuickPrompt = useCallback(async (prompt: string) => {
-    setInputText('');
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    await sendMessage(prompt);
-    setTimeout(() => flatListRef.current?.scrollToEnd({ animated: true }), 150);
-  }, [sendMessage]);
-
-  const handleSpeakToggle = useCallback(async (messageId: string, content: string) => {
-    if (speakingId === messageId) {
-      Speech.stop();
-      setSpeakingId(null);
-    } else {
-      setSpeakingId(messageId);
-      Speech.speak(content, {
-        language: 'en-US',
-        pitch: 1.0,
-        rate: 0.95,
-        onDone: () => setSpeakingId(null),
-        onStopped: () => setSpeakingId(null),
-        onError: () => setSpeakingId(null),
-      });
-    }
-  }, [speakingId]);
-
-  const handleMicPress = useCallback(() => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-    
-    const SpeechRecognition = typeof window !== 'undefined' && 
-      ((window as any).SpeechRecognition || (window as any).webkitSpeechRecognition);
-    
-    if (SpeechRecognition) {
-      if (isListening) {
-        setIsListening(false);
-        if (recognitionRef.current) {
-          try {
-            recognitionRef.current.stop();
-          } catch (_) {}
-        }
-      } else {
-        setIsListening(true);
-        const recognition = new SpeechRecognition();
-        recognition.continuous = false;
-        recognition.interimResults = false;
-        recognition.lang = 'en-US';
-        
-        recognition.onresult = (event: any) => {
-          const transcript = event.results[0][0].transcript;
-          if (transcript) {
-            sendVoiceMessage(transcript);
-          }
-        };
-        
-        recognition.onerror = () => {
-          setIsListening(false);
-        };
-        
-        recognition.onend = () => {
-          setIsListening(false);
-        };
-        
-        recognitionRef.current = recognition;
-        recognition.start();
-      }
-    } else {
-      // Mobile fallback/dictation dialog
-      Alert.alert(
-        'Voice Assistant',
-        'Direct system voice dictation is currently processing. Would you like to try a curated movie request query, or activate your mobile keyboard dictation?',
-        [
-          {
-            text: 'Try Curated Sample',
-            onPress: () => {
-              setIsListening(true);
-              setTimeout(() => {
-                setIsListening(false);
-                const randomQuery = MOCK_SPEECH_QUERIES[Math.floor(Math.random() * MOCK_SPEECH_QUERIES.length)];
-                let currentText = '';
-                let index = 0;
-                
-                const typeCharacter = () => {
-                  if (index < randomQuery.length) {
-                    currentText += randomQuery[index];
-                    setInputText(currentText);
-                    index++;
-                    typingTimeoutRef.current = setTimeout(typeCharacter, 22);
-                  } else {
-                    setTimeout(() => {
-                      sendVoiceMessage(randomQuery);
-                    }, 500);
-                  }
-                };
-                
-                typeCharacter();
-              }, 1200);
-            }
-          },
-          {
-            text: 'Keyboard Dictation',
-            onPress: () => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              setTimeout(() => {
-                inputRef.current?.focus();
-              }, 150);
-            }
-          },
-          { text: 'Cancel', style: 'cancel' }
-        ]
-      );
-    }
-  }, [isListening, sendVoiceMessage]);
-
-  const navigateToMovie = useCallback((movie: Movie) => {
-    navigation.navigate('MovieDetails', { movieId: movie.id });
-  }, [navigation]);
-
-  // Reanimated styling
-  const drawerAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: drawerTranslateX.value }],
-  }));
-
-  const backdropAnimatedStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(
-      drawerTranslateX.value,
-      [-DRAWER_WIDTH, 0],
-      [0, 0.65],
-      Extrapolate.CLAMP
-    ),
-  }));
-
-  const micAnimatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: micScale.value }],
-  }));
-
-  const renderItem = useCallback(({ item }: { item: ChatMessage }) => (
-    <MessageBubble
-      message={item}
-      onMoviePress={navigateToMovie}
-      isSpeaking={speakingId === item.id}
-      onSpeakToggle={() => handleSpeakToggle(item.id, item.content)}
-    />
-  ), [speakingId, navigateToMovie, handleSpeakToggle]);
+  const s1 = useAnimatedStyle(() => ({ transform: [{ translateY: d1.value }] }));
+  const s2 = useAnimatedStyle(() => ({ transform: [{ translateY: d2.value }] }));
+  const s3 = useAnimatedStyle(() => ({ transform: [{ translateY: d3.value }] }));
 
   return (
-    <View style={styles.container}>
-      {/* Top Header */}
-      <SafeAreaView edges={['top']} style={{ backgroundColor: Colors.background }}>
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
-            <Pressable onPress={toggleDrawer} style={styles.menuBtn} hitSlop={12}>
-              <Ionicons name="menu-outline" size={24} color={Colors.textPrimary} />
-            </Pressable>
-            <View style={styles.aiOrbSmall}>
-              <Ionicons name="sparkles" size={14} color={Colors.primary} />
-            </View>
-            <View>
-              <Text style={styles.headerTitle}>Cine AI</Text>
-              <View style={styles.onlineRow}>
-                <View style={styles.onlineDot} />
-                <Text style={styles.headerSubtitle}>Personal Movie Critic</Text>
-              </View>
-            </View>
-          </View>
-          <Pressable 
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-              clearCurrentSession();
-            }} 
-            style={styles.newChatBtnHeader} 
-            hitSlop={8}
-          >
-            <Ionicons name="add" size={16} color={Colors.primary} />
-            <Text style={styles.newChatTextHeader}>New</Text>
-          </Pressable>
-        </View>
-      </SafeAreaView>
-
-      <KeyboardAvoidingView
-        style={{ flex: 1, justifyContent: 'space-between' }}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-      >
-        {/* Messages List with senior FlatList optimizations */}
-        <FlatList
-          ref={flatListRef}
-          style={{ flex: 1 }}
-          data={messages}
-          keyExtractor={item => item.id}
-          contentContainerStyle={styles.messagesList}
-          showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => flatListRef.current?.scrollToEnd({ animated: true })}
-          removeClippedSubviews={Platform.OS === 'android'}
-          initialNumToRender={8}
-          maxToRenderPerBatch={8}
-          windowSize={5}
-          updateCellsBatchingPeriod={50}
-          ListEmptyComponent={
-            <View style={styles.emptyChat}>
-              <View style={styles.emptyChatOrbWrapper}>
-                <View style={styles.emptyChatOrbRing} />
-                <View style={styles.emptyChatOrb}>
-                  <Ionicons name="sparkles" size={32} color={Colors.primary} />
-                </View>
-              </View>
-              <Text style={styles.emptyChatTitle}>Cine AI Assistant</Text>
-              <Text style={styles.emptyChatSubtitle}>
-                Tell me your mood, favorite genres, or ask me for curated cinematic suggestions!
-              </Text>
-              
-              <ScrollView 
-                horizontal 
-                showsHorizontalScrollIndicator={false} 
-                contentContainerStyle={styles.quickPromptsScrollContent}
-                style={styles.quickPromptsScroll}
-              >
-                {QUICK_PROMPTS.map((prompt, idx) => (
-                  <SuggestionChip 
-                    key={idx}
-                    prompt={prompt} 
-                    onPress={() => handleQuickPrompt(prompt.text)} 
-                  />
-                ))}
-              </ScrollView>
-            </View>
-          }
-          renderItem={renderItem}
-          ListFooterComponent={isSending ? <TypingIndicator /> : null}
-        />
-
-        {/* Dynamic Voice Overlay UI */}
-        {isListening && (
-          <View style={styles.voiceOverlay}>
-            <LinearGradient
-              colors={['rgba(10,10,15,0.92)', 'rgba(17,17,24,0.98)']}
-              style={StyleSheet.absoluteFillObject}
-            />
-            <View style={styles.voiceOverlayContent}>
-              <View style={styles.breathOrbOuter}>
-                <Animated.View style={[styles.breathOrbInner, micAnimatedStyle]}>
-                  <Ionicons name="mic" size={32} color={Colors.white} />
-                </Animated.View>
-              </View>
-              <Text style={styles.voiceOverlayTitle}>Cine Voice Assistant</Text>
-              <Text style={styles.voiceOverlayStatus}>Say something like "I want space movies"...</Text>
-              
-              <VoiceWave isListening={isListening} isProcessing={isSending} />
-              
-              <Pressable onPress={handleMicPress} style={styles.stopVoiceBtn}>
-                <Ionicons name="close" size={20} color={Colors.white} />
-                <Text style={styles.stopVoiceBtnText}>Cancel</Text>
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        {/* Input Bar */}
-        <View style={[styles.inputBar, { paddingBottom: bottomPadding }]}>
-          <View style={styles.inputWrapper}>
-            <TextInput
-              ref={inputRef}
-              style={styles.input}
-              value={inputText}
-              onChangeText={setInputText}
-              placeholder="Message Cine AI..."
-              placeholderTextColor={Colors.textMuted}
-              multiline
-              maxLength={400}
-              returnKeyType="send"
-              blurOnSubmit={false}
-              onSubmitEditing={handleSend}
-            />
-            
-            <Animated.View style={micAnimatedStyle}>
-              <Pressable
-                onPress={handleMicPress}
-                style={styles.micBtn}
-                hitSlop={12}
-              >
-                <Ionicons name="mic-outline" size={20} color={Colors.textSecondary} />
-              </Pressable>
-            </Animated.View>
-
-            <Pressable
-              onPress={handleSend}
-              disabled={!inputText.trim() || isSending}
-              style={[styles.sendBtn, (!inputText.trim() || isSending) && styles.sendBtnDisabled]}
-              hitSlop={12}
-            >
-              {isSending ? (
-                <ActivityIndicator size="small" color={Colors.white} />
-              ) : (
-                <Ionicons name="arrow-up" size={18} color={Colors.white} />
-              )}
-            </Pressable>
-          </View>
-        </View>
-      </KeyboardAvoidingView>
-
-      {/* History Drawer Backdrop */}
-      {drawerOpen && (
-        <Animated.View style={[styles.backdrop, backdropAnimatedStyle]}>
-          <Pressable onPress={closeDrawer} style={StyleSheet.absoluteFill} />
-        </Animated.View>
-      )}
-
-      {/* Sliding History Drawer */}
-      <Animated.View style={[styles.drawerContainer, drawerAnimatedStyle]}>
-        <SafeAreaView edges={['top']} style={{ flex: 1 }}>
-          <View style={styles.drawerHeader}>
-            <Text style={styles.drawerHeaderTitle}>Conversations</Text>
-            <Pressable onPress={closeDrawer} hitSlop={15}>
-              <Ionicons name="close" size={22} color={Colors.textSecondary} />
-            </Pressable>
-          </View>
-
-          {/* New Chat CTA */}
-          <Pressable 
-            onPress={() => {
-              clearCurrentSession();
-              closeDrawer();
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-            }}
-            style={styles.drawerNewChatBtn}
-          >
-            <Ionicons name="add" size={18} color={Colors.white} />
-            <Text style={styles.drawerNewChatBtnText}>New Conversation</Text>
-          </Pressable>
-
-          <ScrollView 
-            style={styles.drawerScrollView} 
-            contentContainerStyle={styles.drawerScrollViewContent}
-            showsVerticalScrollIndicator={false}
-          >
-            {sessions.length === 0 ? (
-              <View style={styles.drawerEmptyState}>
-                <Ionicons name="chatbubbles-outline" size={28} color={Colors.textMuted} />
-                <Text style={styles.drawerEmptyText}>No previous chats</Text>
-              </View>
-            ) : (
-              sessions.map(sess => {
-                const isActive = currentSession?.id === sess.id;
-                return (
-                  <View 
-                    key={sess.id} 
-                    style={[styles.drawerSessionRow, isActive && styles.drawerSessionRowActive]}
-                  >
-                    <Pressable
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-                        loadSession(sess.id);
-                        closeDrawer();
-                      }}
-                      style={{ flex: 1 }}
-                    >
-                      <Text 
-                        style={[styles.drawerSessionTitle, isActive && styles.drawerSessionTitleActive]} 
-                        numberOfLines={1}
-                      >
-                        {sess.title || 'Untitled Chat'}
-                      </Text>
-                      <Text style={styles.drawerSessionTime}>
-                        {new Date(sess.updated_at).toLocaleDateString(undefined, {
-                          month: 'short',
-                          day: 'numeric',
-                          hour: '2-digit',
-                          minute: '2-digit'
-                        })}
-                      </Text>
-                    </Pressable>
-                    
-                    <Pressable 
-                      onPress={() => {
-                        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-                        deleteSession(sess.id);
-                      }}
-                      style={styles.drawerDeleteBtn}
-                      hitSlop={8}
-                    >
-                      <Ionicons name="trash-outline" size={15} color={Colors.textMuted} />
-                    </Pressable>
-                  </View>
-                );
-              })
-            )}
-          </ScrollView>
-        </SafeAreaView>
-      </Animated.View>
+    <View style={typingStyles.row}>
+      <View style={typingStyles.orbDot} />
+      <View style={typingStyles.bubble}>
+        <Animated.View style={[typingStyles.dot, s1]} />
+        <Animated.View style={[typingStyles.dot, s2]} />
+        <Animated.View style={[typingStyles.dot, s3]} />
+      </View>
     </View>
   );
 };
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.background },
+const typingStyles = StyleSheet.create({
+  row: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 16, marginBottom: 8 },
+  orbDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.accent.crimsonMuted, borderWidth: 1, borderColor: Colors.accent.crimson, alignItems: 'center', justifyContent: 'center' },
+  bubble: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: Colors.bg.raised, borderRadius: Radius.xl, paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: Colors.glass.border },
+  dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.text.tertiary },
+});
 
-  // Header
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: Spacing.base,
-    paddingVertical: Spacing.md,
-    borderBottomWidth: 1,
-    borderColor: Colors.border,
-  },
-  menuBtn: {
-    paddingRight: Spacing.sm,
-  },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  aiOrbSmall: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.primaryMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
-  onlineDot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.success },
-  headerTitle: { color: Colors.textPrimary, fontSize: Typography.base + 2, fontFamily: 'Poppins_600SemiBold' },
-  headerSubtitle: { color: Colors.textSecondary, fontSize: Typography.xs, fontFamily: 'Inter_500Medium' },
-  newChatBtnHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    backgroundColor: Colors.primaryMuted,
-    paddingHorizontal: Spacing.sm + 2,
-    paddingVertical: Spacing.xs,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-  },
-  newChatTextHeader: { color: Colors.primary, fontSize: Typography.xs + 1, fontFamily: 'Inter_600SemiBold' },
+// ─── Movie Recommendation Card (Optimized Height & Overlays) ─────────────────
+const MovieChip: React.FC<{ movie: Movie; reason?: string; onPress: () => void }> = ({ movie, reason, onPress }) => {
+  const poster = movie.poster_path
+    ? (movie.poster_path.startsWith('http')
+        ? movie.poster_path
+        : `https://img.omdbapi.com/?apikey=3be0d3d0&i=${movie.poster_path}&h=300`)
+    : null;
 
-  // Messages List
-  messagesList: { paddingVertical: Spacing.md, paddingBottom: 24 },
-  messageRow: { flexDirection: 'row', marginVertical: Spacing.xs + 2, paddingHorizontal: Spacing.md },
-  messageRowUser: { justifyContent: 'flex-end' },
-  messageRowAI: { justifyContent: 'flex-start', alignItems: 'flex-end', gap: Spacing.sm },
+  const matchPct = Math.floor(Math.random() * 8 + 91);
+
+  return (
+    <Pressable style={movieChipStyles.card} onPress={onPress}>
+      <Image
+        source={poster ? { uri: poster } : undefined}
+        style={movieChipStyles.poster}
+        contentFit="cover"
+      />
+      <LinearGradient colors={['transparent', 'rgba(7,7,9,0.3)', 'rgba(7,7,9,0.98)']} style={movieChipStyles.grad} />
+      
+      <View style={movieChipStyles.badge}>
+        <Ionicons name="sparkles" size={8} color={Colors.accent.crimsonLight} />
+        <Text style={movieChipStyles.badgeText} allowFontScaling={false}>{matchPct}% Match</Text>
+      </View>
+
+      <View style={movieChipStyles.meta}>
+        <Text style={movieChipStyles.title} numberOfLines={1} allowFontScaling={false}>
+          {movie.title}
+        </Text>
+        {reason ? (
+          <Text style={movieChipStyles.reason} numberOfLines={2} allowFontScaling={false}>
+            {reason}
+          </Text>
+        ) : (
+          <Text style={movieChipStyles.reason} numberOfLines={2} allowFontScaling={false}>
+            Curated perfectly based on your preferences.
+          </Text>
+        )}
+        
+        <View style={movieChipStyles.tagsRow}>
+          <Text style={movieChipStyles.tagText} allowFontScaling={false}>#AI_Pick</Text>
+          <Text style={movieChipStyles.tagText} allowFontScaling={false}>#MustWatch</Text>
+        </View>
+
+        {movie.vote_average > 0 && (
+          <View style={movieChipStyles.ratingRow}>
+            <Ionicons name="star" size={9} color={Colors.accent.gold} />
+            <Text style={movieChipStyles.rating} allowFontScaling={false}>
+              {movie.vote_average.toFixed(1)}
+            </Text>
+          </View>
+        )}
+      </View>
+    </Pressable>
+  );
+};
+
+const movieChipStyles = StyleSheet.create({
+  card: { width: 130, height: 195, borderRadius: Radius.lg, overflow: 'hidden', backgroundColor: Colors.bg.surface, marginRight: 10, position: 'relative', borderWidth: 1, borderColor: Colors.glass.border },
+  poster: { ...StyleSheet.absoluteFillObject },
+  grad: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120 },
+  badge: { position: 'absolute', top: 6, left: 6, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(230, 57, 70, 0.22)', borderRadius: Radius.full, borderWidth: 1, borderColor: 'rgba(230, 57, 70, 0.4)', paddingHorizontal: 6, paddingVertical: 2 },
+  badgeText: { fontSize: 8, fontFamily: 'Inter_700Bold', color: Colors.accent.crimsonLight, letterSpacing: 0.2 },
+  meta: { position: 'absolute', bottom: 8, left: 8, right: 8 },
+  title: { fontSize: 11, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, marginBottom: 2 },
+  reason: { fontSize: 9, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, lineHeight: 11, marginBottom: 3 },
+  tagsRow: { flexDirection: 'row', gap: 4, marginBottom: 4 },
+  tagText: { fontSize: 8, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimsonLight },
+  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  rating: { fontSize: 9, fontFamily: 'Inter_500Medium', color: Colors.accent.gold },
+});
+
+// ─── Message Bubble ────────────────────────────────────────────────────────
+const MessageBubble: React.FC<{
+  message: ChatMessage;
+  onMoviePress: (id: number) => void;
+}> = ({ message, onMoviePress }) => {
+  const isUser = message.role === 'user';
+  const movies = message.movies?.map(m => m.movie) || [];
+
+  return (
+    <View style={[bubbleStyles.row, isUser && bubbleStyles.rowUser]}>
+      {!isUser && (
+        <View style={bubbleStyles.aiAvatar}>
+          <Ionicons name="sparkles" size={12} color={Colors.accent.crimson} />
+        </View>
+      )}
+
+      <View style={[bubbleStyles.bubbleGroup, isUser && bubbleStyles.bubbleGroupUser]}>
+        <View style={[bubbleStyles.bubble, isUser ? bubbleStyles.bubbleUser : bubbleStyles.bubbleAI]}>
+          <Text style={[bubbleStyles.text, isUser && bubbleStyles.textUser]} allowFontScaling={false}>
+            {message.content}
+          </Text>
+        </View>
+
+        {movies.length > 0 && (
+          <View style={bubbleStyles.moviesContainer}>
+            <FlatList
+              data={movies.slice(0, 6)}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              keyExtractor={m => String(m.id)}
+              renderItem={({ item, index }) => (
+                <MovieChip
+                  movie={item}
+                  reason={message.movies?.[index]?.reason}
+                  onPress={() => onMoviePress(item.id)}
+                />
+              )}
+            />
+          </View>
+        )}
+
+        <Text style={bubbleStyles.timestamp} allowFontScaling={false}>
+          {new Date(message.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </Text>
+      </View>
+    </View>
+  );
+};
+
+const bubbleStyles = StyleSheet.create({
+  row: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 16, gap: 8, alignItems: 'flex-end' },
+  rowUser: { flexDirection: 'row-reverse' },
   aiAvatar: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: Colors.primaryMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.primary,
+    width: 28, height: 28, borderRadius: 14,
+    backgroundColor: Colors.accent.crimsonMuted, borderWidth: 1, borderColor: Colors.accent.crimson,
+    alignItems: 'center', justifyContent: 'center', flexShrink: 0,
   },
+  bubbleGroup: { maxWidth: W * 0.75, gap: 8 },
+  bubbleGroupUser: { alignItems: 'flex-end' },
   bubble: {
-    borderRadius: Radius.xl,
-    padding: Spacing.md,
-    ...Shadows.sm,
+    borderRadius: Radius.xl, paddingHorizontal: 16, paddingVertical: 12,
+    borderWidth: 1,
   },
   bubbleUser: {
-    backgroundColor: Colors.primary,
+    backgroundColor: Colors.accent.crimsonMuted, borderColor: `${Colors.accent.crimson}40`,
     borderBottomRightRadius: 4,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.15)',
   },
   bubbleAI: {
-    backgroundColor: Colors.surfaceElevated,
+    backgroundColor: Colors.bg.raised, borderColor: Colors.glass.border,
     borderBottomLeftRadius: 4,
-    borderWidth: 1,
-    borderColor: Colors.border,
   },
-  bubbleText: {
-    color: Colors.textPrimary,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_400Regular',
-    lineHeight: Typography.base * 1.55,
-  },
-  bubbleTextUser: { color: Colors.white },
-  bubbleHeaderRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: Spacing.sm,
-  },
-  speakIconBtn: {
-    padding: Spacing.xs,
-    marginRight: -Spacing.xs,
-    marginTop: 1,
-  },
-  timestamp: {
-    color: 'rgba(255,255,255,0.3)',
-    fontSize: 9,
-    marginTop: Spacing.xs,
-    alignSelf: 'flex-end',
-  },
-  recsScroll: { marginTop: Spacing.md, marginHorizontal: -Spacing.xs },
-  recsContent: { flexDirection: 'row', paddingHorizontal: Spacing.xs, gap: Spacing.sm },
+  text: { fontSize: 14, fontFamily: 'Inter_400Regular', color: Colors.text.primary, lineHeight: 21 },
+  textUser: { color: Colors.text.primary },
+  moviesContainer: { marginTop: 4 },
+  timestamp: { fontSize: 10, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary, marginTop: 2 },
+});
 
-  moodTagsRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: Spacing.xs,
-    marginTop: Spacing.sm,
-  },
-  moodTag: {
-    backgroundColor: Colors.indigoMuted,
-    paddingHorizontal: Spacing.sm,
-    paddingVertical: 2,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.indigo,
-  },
-  moodTagText: { color: Colors.indigoLight, fontSize: Typography.xs, fontFamily: 'Inter_500Medium' },
+// ─── Welcome State (Compact & Spatially Balanced) ──────────────────────────
+const WelcomeState: React.FC<{
+  onChipPress: (query: string) => void;
+  onPreviewPress: (id: number) => void;
+}> = ({ onChipPress, onPreviewPress }) => {
+  return (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={welcomeStyles.scrollContent}
+    >
+      {/* Dynamic Cinematic Hero Block */}
+      <View style={welcomeStyles.heroBlock}>
+        <View style={welcomeStyles.orbOuterContainer}>
+          <PulseRing delay={0} />
+          <PulseRing delay={1200} />
+          <LinearGradient
+            colors={[Colors.accent.orbStart, Colors.accent.orbMid, Colors.accent.orbEnd]}
+            style={welcomeStyles.orbCore}
+          >
+            <Ionicons name="sparkles" size={14} color={Colors.text.onAccent} />
+          </LinearGradient>
+        </View>
 
-  // Empty Chat State
-  emptyChat: { alignItems: 'center', paddingTop: 24, paddingHorizontal: Spacing.xl },
-  emptyChatOrbWrapper: {
-    width: 80,
-    height: 80,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: Spacing.lg,
-  },
-  emptyChatOrbRing: {
-    position: 'absolute',
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    borderWidth: 1,
-    borderColor: Colors.primary,
-    opacity: 0.35,
-  },
-  emptyChatOrb: {
-    width: 62,
-    height: 62,
-    borderRadius: 31,
-    backgroundColor: Colors.primaryMuted,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: Colors.primary,
-  },
-  emptyChatTitle: {
-    color: Colors.textPrimary,
-    fontSize: Typography['2xl'] + 2,
-    fontFamily: 'Poppins_700Bold',
-    marginBottom: Spacing.xs + 2,
-  },
-  emptyChatSubtitle: {
-    color: Colors.textSecondary,
-    fontSize: Typography.base - 1,
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-    lineHeight: Typography.base * 1.5,
-    marginBottom: Spacing.xl + 4,
-  },
-  quickPromptsScroll: {
-    marginTop: Spacing.md,
-    marginBottom: Spacing.xs,
-    width: '100%',
-  },
-  quickPromptsScrollContent: {
-    paddingHorizontal: Spacing.xs,
-    gap: Spacing.sm,
-  },
-  quickPrompt: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.surfaceElevated,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 10,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    height: 38,
-  },
-  quickPromptText: {
-    color: Colors.textSecondary,
-    fontSize: Typography.xs + 1,
-    fontFamily: 'Inter_500Medium',
-  },
+        <Text style={welcomeStyles.greeting} allowFontScaling={false}>
+          CineAI Curator • Active
+        </Text>
+        <Text style={welcomeStyles.title} allowFontScaling={false}>
+          What cinematic masterpiece are we discovering tonight?
+        </Text>
 
-  // Input Bar
+        {/* AI Personality Intro Bubble */}
+        <View style={welcomeStyles.introBubble}>
+          <Ionicons name="sparkles" size={12} color={Colors.accent.crimson} style={{ marginRight: 6, marginTop: 1 }} />
+          <Text style={welcomeStyles.introText} allowFontScaling={false}>
+            I'm CineAI, your cinematic critic. Tell me your favorite genres, directors, or ask about an era—let's find your next favorite film together.
+          </Text>
+        </View>
+      </View>
+
+      {/* Horizontally Scrolling Quick Actions */}
+      <View style={welcomeStyles.section}>
+        <Text style={welcomeStyles.sectionTitle} allowFontScaling={false}>Rapid Prompt Capsules</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={welcomeStyles.pillsContainer}
+        >
+          {SUGGESTION_CHIPS.map(chip => (
+            <Pressable
+              key={chip.id}
+              style={({ pressed }) => [welcomeStyles.pillChip, pressed && { transform: [{ scale: 0.98 }] }]}
+              onPress={() => onChipPress(chip.query)}
+            >
+              <Ionicons name={chip.icon as any} size={11} color={Colors.accent.crimson} />
+              <Text style={welcomeStyles.pillText} allowFontScaling={false}>{chip.label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+
+      {/* AI Curated Highlights Preview */}
+      <View style={welcomeStyles.section}>
+        <Text style={welcomeStyles.sectionTitle} allowFontScaling={false}>Tonight's AI Highlights</Text>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={welcomeStyles.highlightsContainer}
+        >
+          {PREVIEW_HIGHLIGHTS.map(item => (
+            <Pressable
+              key={item.id}
+              style={({ pressed }) => [welcomeStyles.highlightCard, pressed && { transform: [{ scale: 0.98 }] }]}
+              onPress={() => onPreviewPress(item.movieId)}
+            >
+              <Image source={{ uri: item.poster }} style={welcomeStyles.highlightPoster} contentFit="cover" />
+              <LinearGradient colors={['transparent', 'rgba(7,7,9,0.3)', 'rgba(7,7,9,0.96)']} style={welcomeStyles.highlightGrad} />
+              
+              <View style={welcomeStyles.highlightBadge}>
+                <Ionicons name="sparkles" size={8} color={Colors.accent.crimson} />
+                <Text style={welcomeStyles.highlightBadgeText} allowFontScaling={false}>{item.match}% Match</Text>
+              </View>
+
+              <View style={welcomeStyles.highlightMeta}>
+                <Text style={welcomeStyles.highlightName} numberOfLines={1} allowFontScaling={false}>{item.title}</Text>
+                <Text style={welcomeStyles.highlightDesc} numberOfLines={1} allowFontScaling={false}>{item.desc}</Text>
+              </View>
+            </Pressable>
+          ))}
+        </ScrollView>
+      </View>
+    </ScrollView>
+  );
+};
+
+const welcomeStyles = StyleSheet.create({
+  scrollContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 170 },
+  heroBlock: { alignItems: 'center', justifyContent: 'center', marginVertical: 4 },
+  orbOuterContainer: { width: 56, height: 56, position: 'relative', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
+  auraRing: { position: 'absolute', width: 56, height: 56, borderRadius: 28, borderWidth: 1.2, borderColor: Colors.accent.crimson, backgroundColor: 'transparent' },
+  orbCore: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+  greeting: { fontSize: 10, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimsonLight, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 4 },
+  title: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, textAlign: 'center', lineHeight: 24, letterSpacing: -0.3, paddingHorizontal: 16, marginBottom: 8 },
+  introBubble: { flexDirection: 'row', backgroundColor: Colors.bg.surface, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.glass.border, paddingVertical: 8, paddingHorizontal: 12, marginHorizontal: 8 },
+  introText: { flex: 1, fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, lineHeight: 16 },
+  section: { marginTop: 18 },
+  sectionTitle: { fontSize: 11, fontFamily: 'Poppins_700Bold', color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
+  pillsContainer: { gap: 8, paddingHorizontal: 20, paddingRight: 36 },
+  pillChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: Colors.bg.surface, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.glass.border, paddingHorizontal: 10, paddingVertical: 5 },
+  pillText: { fontSize: 11, fontFamily: 'Inter_500Medium', color: Colors.text.primary },
+  highlightsContainer: { gap: 12, paddingHorizontal: 20, paddingRight: 36 },
+  highlightCard: { width: 120, height: 175, borderRadius: Radius.lg, overflow: 'hidden', backgroundColor: Colors.bg.surface, position: 'relative', borderWidth: 1, borderColor: Colors.glass.border, marginRight: 10 },
+  highlightPoster: { ...StyleSheet.absoluteFillObject },
+  highlightGrad: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 100 },
+  highlightBadge: { position: 'absolute', top: 6, left: 6, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(230, 57, 70, 0.22)', borderRadius: Radius.full, borderWidth: 1, borderColor: 'rgba(230, 57, 70, 0.4)', paddingHorizontal: 5, paddingVertical: 2 },
+  highlightBadgeText: { fontSize: 8, fontFamily: 'Inter_700Bold', color: Colors.accent.crimson },
+  highlightMeta: { position: 'absolute', bottom: 8, left: 8, right: 8 },
+  highlightName: { fontSize: 12, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, marginBottom: 1 },
+  highlightDesc: { fontSize: 9, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
+});
+
+// ─── Main AIChatScreen Redesign Refined ──────────────────────────────────────
+export const AIChatScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
+  const navigation = useNavigation<ChatNav>();
+  const {
+    sessions, currentSession, isSending, sendMessage,
+    createSession, loadSession, deleteSession, loadSessions
+  } = useChatStore();
+
+  const [text, setText] = useState('');
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const [voiceActive, setVoiceActive] = useState(false);
+  const [isListening, setIsListening] = useState(false);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [optionsVisible, setOptionsVisible] = useState(false);
+
+  const listRef = useRef<FlatList>(null);
+  const inputRef = useRef<TextInput>(null);
+  const sendScale = useSharedValue(1);
+
+  const messages = currentSession?.messages || [];
+  const isEmpty = messages.length === 0;
+
+  const sendBtnStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: sendScale.value }],
+    opacity: text.trim() ? 1 : 0.4,
+  }));
+
+  useEffect(() => {
+    loadSessions();
+    if (!currentSession) createSession();
+  }, []);
+
+  useEffect(() => {
+    if (messages.length > 0) {
+      setTimeout(() => {
+        listRef.current?.scrollToEnd({ animated: true });
+      }, 100);
+    }
+  }, [messages.length]);
+
+  const handleSend = async () => {
+    if (!text.trim() || isSending) return;
+    const msg = text.trim();
+    setText('');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    sendScale.value = withSequence(withSpring(0.85, Motion.springs.snappy), withSpring(1, Motion.springs.bounce));
+    await sendMessage(msg);
+  };
+
+  const handleChipPress = (query: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setText(query);
+    setTimeout(() => inputRef.current?.focus(), 100);
+  };
+
+  const toggleVoiceMode = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    setVoiceActive(prev => {
+      const next = !prev;
+      if (next) {
+        setIsListening(false);
+        setIsProcessing(false);
+      }
+      return next;
+    });
+  };
+
+  const handleMicPress = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    if (!isListening && !isProcessing) {
+      setIsListening(true);
+      setIsProcessing(false);
+    } else if (isListening) {
+      setIsListening(false);
+      setIsProcessing(true);
+
+      setTimeout(() => {
+        const randomPhrase = MOCK_SPEECH_PHRASES[Math.floor(Math.random() * MOCK_SPEECH_PHRASES.length)];
+        setIsProcessing(false);
+        setVoiceActive(false);
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+        sendMessage(randomPhrase);
+      }, 1800);
+    }
+  };
+
+  const handleMoodPillPress = (label: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    setText(prev => (prev ? `${prev} with a ${label} vibe` : `Recommend a ${label} movie`));
+    setOptionsVisible(false);
+  };
+
+  const selectHistorySession = (id: string) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    loadSession(id);
+    setHistoryVisible(false);
+  };
+
+  const removeHistorySession = (id: string) => {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+    deleteSession(id);
+  };
+
+  const handleStartNewChat = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    createSession();
+    setHistoryVisible(false);
+  };
+
+  return (
+    <KeyboardAvoidingView
+      style={styles.root}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+    >
+      <StatusBar barStyle="light-content" backgroundColor={Colors.bg.void} />
+
+      {/* Sticky Compact Header */}
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <View style={styles.headerLeft}>
+          <LinearGradient colors={[Colors.accent.orbStart, Colors.accent.orbEnd]} style={styles.headerOrb}>
+            <Ionicons name="sparkles" size={12} color={Colors.text.onAccent} />
+          </LinearGradient>
+          <View>
+            <Text style={styles.headerTitle} allowFontScaling={false}>CineAI</Text>
+            <View style={styles.onlineRow}>
+              <View style={styles.onlineDot} />
+              <Text style={styles.onlineText} allowFontScaling={false}>AI Ready</Text>
+            </View>
+          </View>
+        </View>
+        <Pressable style={styles.headerBtn} onPress={() => setHistoryVisible(true)}>
+          <Ionicons name="time-outline" size={20} color={Colors.text.secondary} />
+        </Pressable>
+      </View>
+
+      {/* Dynamic Content View */}
+      {isEmpty ? (
+        <WelcomeState
+          onChipPress={handleChipPress}
+          onPreviewPress={id => navigation.navigate('MovieDetails', { movieId: id })}
+        />
+      ) : (
+        <FlatList
+          ref={listRef}
+          data={messages}
+          keyExtractor={m => m.id}
+          renderItem={({ item }) => (
+            <MessageBubble
+              message={item}
+              onMoviePress={id => navigation.navigate('MovieDetails', { movieId: id })}
+            />
+          )}
+          contentContainerStyle={styles.listContent}
+          showsVerticalScrollIndicator={false}
+          ListFooterComponent={isSending ? <TypingIndicator /> : null}
+        />
+      )}
+
+      {/* Premium Floating Chat Input bar */}
+      <View style={[styles.inputBar, { bottom: Platform.OS === 'ios' ? 90 : 80 }]}>
+        <BlurView
+          intensity={Platform.OS === 'ios' ? 60 : 0}
+          tint="dark"
+          style={StyleSheet.absoluteFill}
+        />
+        {voiceActive ? (
+          <View style={styles.voicePanelRow}>
+            <Pressable style={styles.iconSideBtn} onPress={() => setVoiceActive(false)}>
+              <Ionicons name={"keyboard-outline" as any} size={18} color={Colors.text.secondary} />
+            </Pressable>
+            <View style={styles.voiceCenter}>
+              <VoiceWave isListening={isListening} isProcessing={isProcessing} compact />
+              <Text style={styles.voiceStatusLabel} allowFontScaling={false}>
+                {isListening ? 'Listening...' : isProcessing ? 'Transcribing...' : 'Tap Mic to speak'}
+              </Text>
+            </View>
+            <Pressable
+              style={[styles.micBtn, isListening && styles.micBtnActive, isProcessing && styles.micBtnProcessing]}
+              onPress={handleMicPress}
+              disabled={isProcessing}
+            >
+              {isProcessing ? (
+                <ActivityIndicator size="small" color={Colors.text.onAccent} />
+              ) : (
+                <Ionicons name={isListening ? 'stop' : 'mic'} size={18} color={isListening ? Colors.text.onAccent : Colors.accent.crimson} />
+              )}
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.inputRow}>
+            <Pressable style={styles.iconSideBtn} onPress={toggleVoiceMode}>
+              <Ionicons name="mic-outline" size={18} color={Colors.text.secondary} />
+            </Pressable>
+            <View style={styles.inputWrap}>
+              <TextInput
+                ref={inputRef}
+                style={styles.input}
+                value={text}
+                onChangeText={setText}
+                placeholder="Ask CineAI about movies, moods, directors..."
+                placeholderTextColor={Colors.text.tertiary}
+                multiline
+                maxLength={500}
+                returnKeyType="send"
+                onSubmitEditing={handleSend}
+                blurOnSubmit={false}
+                selectionColor={Colors.accent.crimson}
+                allowFontScaling={false}
+              />
+            </View>
+            <Pressable style={styles.iconSideBtn} onPress={() => setOptionsVisible(true)}>
+              <Ionicons name="options-outline" size={18} color={Colors.text.secondary} />
+            </Pressable>
+            <Animated.View style={sendBtnStyle}>
+              <Pressable
+                style={[styles.sendBtn, text.trim() && styles.sendBtnActive]}
+                onPress={handleSend}
+                disabled={!text.trim() || isSending}
+              >
+                {isSending ? (
+                  <ActivityIndicator size="small" color={Colors.text.onAccent} />
+                ) : (
+                  <Ionicons name="arrow-up" size={16} color={text.trim() ? Colors.text.onAccent : Colors.text.tertiary} />
+                )}
+              </Pressable>
+            </Animated.View>
+          </View>
+        )}
+      </View>
+
+      {/* Chat History slide-up sheets */}
+      <Modal visible={historyVisible} transparent animationType="slide" onRequestClose={() => setHistoryVisible(false)}>
+        <BlurView intensity={90} tint="dark" style={styles.modalBg}>
+          <Pressable style={styles.modalDismissTap} onPress={() => setHistoryVisible(false)} />
+          <View style={styles.historySheet}>
+            <View style={styles.sheetHeader}>
+              <View style={styles.notch} />
+              <Text style={styles.sheetTitle} allowFontScaling={false}>Chat History</Text>
+              <Text style={styles.sheetSubtitle} allowFontScaling={false}>Resume or manage your past discussions</Text>
+            </View>
+            <ScrollView contentContainerStyle={styles.historyScroll}>
+              {sessions.length === 0 ? (
+                <View style={styles.emptyHistory}>
+                  <Ionicons name="chatbubbles-outline" size={32} color={Colors.text.tertiary} />
+                  <Text style={styles.emptyHistoryText} allowFontScaling={false}>No discussions recorded yet.</Text>
+                </View>
+              ) : (
+                sessions.map(s => {
+                  const hasMsgs = s.messages?.length > 0;
+                  const desc = hasMsgs ? s.messages[s.messages.length - 1].content : 'Empty discussion';
+                  const dateStr = new Date(s.updated_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
+                  const active = currentSession?.id === s.id;
+                  return (
+                    <Pressable key={s.id} style={[styles.sessionItem, active && styles.sessionItemActive]} onPress={() => selectHistorySession(s.id)}>
+                      <View style={styles.sessionLeft}>
+                        <View style={[styles.sessionIconBg, active && styles.sessionIconBgActive]}>
+                          <Ionicons name="chatbox-ellipses-outline" size={16} color={active ? Colors.accent.crimson : Colors.text.secondary} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styles.sessionTitle, active && styles.sessionTitleActive]} numberOfLines={1} allowFontScaling={false}>
+                            {s.title === 'New Chat' && hasMsgs ? s.messages[0].content : s.title}
+                          </Text>
+                          <Text style={styles.sessionDesc} numberOfLines={1} allowFontScaling={false}>{desc}</Text>
+                        </View>
+                      </View>
+                      <View style={styles.sessionRight}>
+                        <Text style={styles.sessionDate} allowFontScaling={false}>{dateStr}</Text>
+                        <Pressable style={styles.trashBtn} onPress={() => removeHistorySession(s.id)} hitSlop={10}>
+                          <Ionicons name="trash-outline" size={16} color={Colors.text.tertiary} />
+                        </Pressable>
+                      </View>
+                    </Pressable>
+                  );
+                })
+              )}
+            </ScrollView>
+            <View style={[styles.sheetFooter, { paddingBottom: insets.bottom + 16 }]}>
+              <Pressable style={styles.newChatBtn} onPress={handleStartNewChat}>
+                <Ionicons name="add" size={20} color={Colors.text.onAccent} />
+                <Text style={styles.newChatText} allowFontScaling={false}>Start a New Chat</Text>
+              </Pressable>
+            </View>
+          </View>
+        </BlurView>
+      </Modal>
+
+      {/* Mood Options modal */}
+      <Modal visible={optionsVisible} transparent animationType="fade" onRequestClose={() => setOptionsVisible(false)}>
+        <BlurView intensity={90} tint="dark" style={styles.modalBgCenter}>
+          <Pressable style={styles.modalDismissTap} onPress={() => setOptionsVisible(false)} />
+          <View style={styles.optionsCard}>
+            <Text style={styles.optionsCardTitle} allowFontScaling={false}>Select Quick Genre Filter</Text>
+            <Text style={styles.optionsCardSubtitle} allowFontScaling={false}>Refine your AI search immediately</Text>
+            <View style={styles.optionsGrid}>
+              {QUICK_MOOD_PILLS.map(pill => (
+                <Pressable
+                  key={pill.id}
+                  style={styles.optionsGridItem}
+                  onPress={() => handleMoodPillPress(pill.label)}
+                >
+                  <Ionicons name={pill.icon as any} size={18} color={Colors.accent.crimson} />
+                  <Text style={styles.optionsGridLabel} allowFontScaling={false}>{pill.label}</Text>
+                </Pressable>
+              ))}
+            </View>
+            <Pressable style={styles.optionsCloseBtn} onPress={() => setOptionsVisible(false)}>
+              <Text style={styles.optionsCloseText} allowFontScaling={false}>Cancel</Text>
+            </Pressable>
+          </View>
+        </BlurView>
+      </Modal>
+    </KeyboardAvoidingView>
+  );
+};
+
+const styles = StyleSheet.create({
+  root: { flex: 1, backgroundColor: Colors.bg.void },
+  header: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 20, paddingBottom: 12,
+    borderBottomWidth: 1, borderBottomColor: Colors.glass.border,
+    backgroundColor: 'rgba(7,7,9,0.82)',
+    zIndex: 10,
+  },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerOrb: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 15, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, letterSpacing: 0.2 },
+  onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  onlineDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: Colors.semantic.success },
+  onlineText: { fontSize: 10, fontFamily: 'Inter_500Medium', color: Colors.semantic.success },
+  headerBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.glass.subtle, borderWidth: 1, borderColor: Colors.glass.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  listContent: { paddingTop: 16, paddingBottom: 170 },
   inputBar: {
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    paddingBottom: Platform.OS === 'ios' ? Spacing.lg + 2 : Spacing.md,
-    borderTopWidth: 1,
-    borderColor: Colors.border,
-    backgroundColor: Colors.background,
+    position: 'absolute', left: 20, right: 20,
+    borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(13,13,18,0.72)', overflow: 'hidden',
+    paddingTop: 6, paddingBottom: 6, paddingHorizontal: 10,
+    shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
+    zIndex: 100,
   },
-  inputWrapper: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    backgroundColor: Colors.surfaceElevated,
-    borderRadius: Radius.xl,
-    borderWidth: 1.5,
-    borderColor: Colors.border,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    gap: Spacing.sm,
-    minHeight: 50,
+  inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  iconSideBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.bg.raised, borderWidth: 1, borderColor: Colors.glass.border,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  inputWrap: {
+    flex: 1, backgroundColor: Colors.bg.raised, borderRadius: Radius.lg,
+    borderWidth: 1, borderColor: Colors.glass.border,
+    paddingHorizontal: 12, paddingVertical: 6, minHeight: 36,
+    maxHeight: 120,
   },
   input: {
-    flex: 1,
-    color: Colors.textPrimary,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_400Regular',
-    maxHeight: 120,
-    paddingTop: 0,
-    paddingBottom: 0,
-  },
-  micBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    alignItems: 'center',
-    justifyContent: 'center',
+    fontSize: 13, fontFamily: 'Inter_400Regular', color: Colors.text.primary,
+    lineHeight: 18, padding: 0,
   },
   sendBtn: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.bg.raised, borderWidth: 1, borderColor: Colors.glass.border,
+    alignItems: 'center', justifyContent: 'center',
   },
-  sendBtnDisabled: { backgroundColor: Colors.border },
-
-  // Sliding History Drawer
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: '#000',
-    zIndex: 90,
+  sendBtnActive: {
+    backgroundColor: Colors.accent.crimson, borderColor: Colors.accent.crimson,
+    shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
   },
-  drawerContainer: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: DRAWER_WIDTH,
-    backgroundColor: 'rgba(17, 17, 24, 0.98)',
-    borderRightWidth: 1,
-    borderColor: Colors.border,
-    zIndex: 100,
-    paddingHorizontal: Spacing.lg,
+  voicePanelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  voiceCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: 12 },
+  voiceStatusLabel: { fontSize: 10, fontFamily: 'Inter_500Medium', color: Colors.text.tertiary, marginTop: -2 },
+  micBtn: {
+    width: 36, height: 36, borderRadius: 18,
+    backgroundColor: Colors.bg.raised, borderWidth: 1, borderColor: Colors.glass.border,
+    alignItems: 'center', justifyContent: 'center',
   },
-  drawerHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: Spacing.lg,
-    borderBottomWidth: 1,
-    borderColor: Colors.borderSubtle,
+  micBtnActive: { backgroundColor: Colors.accent.crimson, borderColor: Colors.accent.crimsonLight },
+  micBtnProcessing: { backgroundColor: Colors.accent.electricMuted, borderColor: Colors.accent.electric },
+  modalBg: { flex: 1, justifyContent: 'flex-end' },
+  modalDismissTap: { ...StyleSheet.absoluteFillObject },
+  historySheet: {
+    backgroundColor: Colors.bg.deep, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
+    borderWidth: 1, borderColor: Colors.glass.border,
+    maxHeight: H * 0.72,
   },
-  drawerHeaderTitle: {
-    color: Colors.white,
-    fontSize: Typography.lg,
-    fontFamily: 'Poppins_600SemiBold',
+  sheetHeader: { alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: Colors.glass.border },
+  notch: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.glass.medium, marginBottom: 12 },
+  sheetTitle: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: Colors.text.primary },
+  sheetSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, marginTop: 2 },
+  historyScroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
+  emptyHistory: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 },
+  emptyHistoryText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary },
+  sessionItem: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    backgroundColor: Colors.bg.surface, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.glass.border,
+    padding: 14, marginBottom: 10,
   },
-  drawerNewChatBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: Spacing.sm,
-    backgroundColor: Colors.primary,
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.lg,
-    marginTop: Spacing.lg,
-    marginBottom: Spacing.md,
-    ...Shadows.sm,
+  sessionItemActive: { borderColor: `${Colors.accent.crimson}60`, backgroundColor: Colors.accent.crimsonMuted },
+  sessionLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  sessionIconBg: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.bg.raised, alignItems: 'center', justifyContent: 'center' },
+  sessionIconBgActive: { backgroundColor: `${Colors.accent.crimson}20` },
+  sessionTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary, marginBottom: 3 },
+  sessionTitleActive: { color: Colors.accent.crimsonLight },
+  sessionDesc: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
+  sessionRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  sessionDate: { fontSize: 11, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary },
+  trashBtn: { padding: 4 },
+  sheetFooter: { paddingHorizontal: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.glass.border },
+  newChatBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
+    backgroundColor: Colors.accent.crimson, borderRadius: Radius.lg,
+    paddingVertical: 14,
+    shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
   },
-  drawerNewChatBtnText: {
-    color: Colors.white,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_600SemiBold',
+  newChatText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text.onAccent },
+  modalBgCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  optionsCard: {
+    width: '100%', backgroundColor: Colors.bg.deep, borderRadius: Radius.xl,
+    borderWidth: 1, borderColor: Colors.glass.border, padding: 20, zIndex: 10,
   },
-  drawerScrollView: { flex: 1 },
-  drawerScrollViewContent: { paddingBottom: Spacing['4xl'] },
-  drawerEmptyState: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: Spacing['3xl'],
-    gap: Spacing.sm,
+  optionsCardTitle: { fontSize: 16, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, textAlign: 'center' },
+  optionsCardSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, textAlign: 'center', marginTop: 4, marginBottom: 20 },
+  optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 20 },
+  optionsGridItem: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    backgroundColor: Colors.bg.surface, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.glass.border,
+    paddingHorizontal: 14, paddingVertical: 10,
   },
-  drawerEmptyText: {
-    color: Colors.textMuted,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_500Medium',
-  },
-  drawerSessionRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    backgroundColor: Colors.surface,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.md,
-    borderRadius: Radius.md,
-    marginBottom: Spacing.sm,
-    borderWidth: 1,
-    borderColor: Colors.borderSubtle,
-  },
-  drawerSessionRowActive: {
-    borderColor: Colors.primary,
-    backgroundColor: Colors.primaryMuted,
-  },
-  drawerSessionTitle: {
-    color: Colors.textSecondary,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_500Medium',
-  },
-  drawerSessionTitleActive: {
-    color: Colors.white,
-    fontFamily: 'Inter_600SemiBold',
-  },
-  drawerSessionTime: {
-    color: Colors.textTertiary,
-    fontSize: 10,
-    marginTop: 4,
-  },
-  drawerDeleteBtn: { padding: Spacing.xs },
-
-  // Voice Overlay System
-  voiceOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 200,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  voiceOverlayContent: {
-    width: '85%',
-    alignItems: 'center',
-    gap: Spacing.lg,
-  },
-  breathOrbOuter: {
-    width: 110,
-    height: 110,
-    borderRadius: 55,
-    backgroundColor: 'rgba(230, 57, 70, 0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: 'rgba(230, 57, 70, 0.15)',
-  },
-  breathOrbInner: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: Colors.primary,
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.glow,
-  },
-  voiceOverlayTitle: {
-    color: Colors.white,
-    fontSize: Typography.xl + 2,
-    fontFamily: 'Poppins_700Bold',
-    letterSpacing: -0.2,
-  },
-  voiceOverlayStatus: {
-    color: Colors.textSecondary,
-    fontSize: Typography.base - 1,
-    fontFamily: 'Inter_400Regular',
-    textAlign: 'center',
-    lineHeight: Typography.base * 1.5,
-    marginBottom: Spacing.sm,
-  },
-  stopVoiceBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.xs,
-    backgroundColor: Colors.surfaceElevated,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: Spacing.sm,
-    borderRadius: Radius.full,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    marginTop: Spacing.xl,
-  },
-  stopVoiceBtnText: {
-    color: Colors.white,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_600SemiBold',
-  },
+  optionsGridLabel: { fontSize: 12, fontFamily: 'Inter_500Medium', color: Colors.text.primary },
+  optionsCloseBtn: { alignSelf: 'stretch', paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.lg, backgroundColor: Colors.bg.raised },
+  optionsCloseText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text.secondary },
 });
 
 export default AIChatScreen;

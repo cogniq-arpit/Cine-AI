@@ -1,220 +1,241 @@
-import React, { useEffect } from 'react';
-import { View, Text, StyleSheet, Dimensions } from 'react-native';
+/**
+ * CineAI V3 — SplashScreen
+ * Premium animated logo intro with cinematic startup experience.
+ */
+import React, { useEffect, useRef } from 'react';
+import {
+  View,
+  StyleSheet,
+  Dimensions,
+  StatusBar,
+} from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
   withTiming,
-  withSequence,
-  withDelay,
   withSpring,
+  withDelay,
+  withSequence,
   runOnJS,
+  Easing,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Colors, Typography, Spacing } from '../constants/theme';
-import { Image } from 'expo-image';
+import { Colors, Typography, Motion } from '../constants/theme';
+import { useAuthStore } from '../store/authStore';
 
-const { width, height } = Dimensions.get('window');
+const { width: W, height: H } = Dimensions.get('window');
 
 interface SplashScreenProps {
-  onFinish: () => void;
+  onFinish?: () => void;
 }
 
 export const SplashScreen: React.FC<SplashScreenProps> = ({ onFinish }) => {
+  const { loadSession } = useAuthStore();
+
+  // Animation values
+  const logoScale = useSharedValue(0.6);
   const logoOpacity = useSharedValue(0);
-  const logoScale = useSharedValue(0.8);
   const taglineOpacity = useSharedValue(0);
-  const shimmerX = useSharedValue(-width);
+  const taglineY = useSharedValue(16);
+  const glowOpacity = useSharedValue(0);
   const screenOpacity = useSharedValue(1);
 
+  // Particle values
+  const p1Opacity = useSharedValue(0);
+  const p2Opacity = useSharedValue(0);
+  const p3Opacity = useSharedValue(0);
+  const p1Scale = useSharedValue(0);
+  const p2Scale = useSharedValue(0);
+  const p3Scale = useSharedValue(0);
+
   const logoStyle = useAnimatedStyle(() => ({
-    opacity: logoOpacity.value,
     transform: [{ scale: logoScale.value }],
+    opacity: logoOpacity.value,
+  }));
+
+  const glowStyle = useAnimatedStyle(() => ({
+    opacity: glowOpacity.value,
   }));
 
   const taglineStyle = useAnimatedStyle(() => ({
     opacity: taglineOpacity.value,
+    transform: [{ translateY: taglineY.value }],
   }));
 
   const screenStyle = useAnimatedStyle(() => ({
     opacity: screenOpacity.value,
   }));
 
-  const shimmerStyle = useAnimatedStyle(() => ({
-    transform: [{ translateX: shimmerX.value }],
+  const p1Style = useAnimatedStyle(() => ({
+    opacity: p1Opacity.value,
+    transform: [{ scale: p1Scale.value }],
+  }));
+  const p2Style = useAnimatedStyle(() => ({
+    opacity: p2Opacity.value,
+    transform: [{ scale: p2Scale.value }],
+  }));
+  const p3Style = useAnimatedStyle(() => ({
+    opacity: p3Opacity.value,
+    transform: [{ scale: p3Scale.value }],
   }));
 
   useEffect(() => {
-    // Logo reveal animation
-    logoOpacity.value = withDelay(300, withTiming(1, { duration: 600 }));
-    logoScale.value = withDelay(300, withSpring(1, { damping: 12, stiffness: 200 }));
+    const doLoad = async () => {
+      await loadSession();
+    };
+    doLoad();
 
-    // Tagline fade in
-    taglineOpacity.value = withDelay(900, withTiming(1, { duration: 500 }));
+    // Logo entrance
+    logoOpacity.value = withTiming(1, { duration: 600, easing: Easing.out(Easing.cubic) });
+    logoScale.value = withSpring(1, Motion.springs.hero);
 
-    // Shimmer effect on logo
-    shimmerX.value = withDelay(500, withTiming(width * 2, { duration: 800 }));
+    // Glow burst
+    glowOpacity.value = withDelay(400, withSequence(
+      withTiming(0.8, { duration: 400 }),
+      withTiming(0.3, { duration: 600 })
+    ));
 
-    // Fade out and finish
-    screenOpacity.value = withDelay(
-      2200,
-      withTiming(0, { duration: 600 }, (finished) => {
-        if (finished) runOnJS(onFinish)();
-      })
-    );
+    // Particles burst
+    p1Opacity.value = withDelay(350, withSequence(withTiming(0.6, { duration: 200 }), withTiming(0, { duration: 800 })));
+    p1Scale.value = withDelay(350, withTiming(2.5, { duration: 1000, easing: Easing.out(Easing.quad) }));
+
+    p2Opacity.value = withDelay(420, withSequence(withTiming(0.5, { duration: 200 }), withTiming(0, { duration: 700 })));
+    p2Scale.value = withDelay(420, withTiming(2, { duration: 900, easing: Easing.out(Easing.quad) }));
+
+    p3Opacity.value = withDelay(480, withSequence(withTiming(0.4, { duration: 200 }), withTiming(0, { duration: 600 })));
+    p3Scale.value = withDelay(480, withTiming(1.8, { duration: 800, easing: Easing.out(Easing.quad) }));
+
+    // Tagline
+    taglineOpacity.value = withDelay(700, withTiming(1, { duration: 500 }));
+    taglineY.value = withDelay(700, withSpring(0, Motion.springs.gentle));
+
+    // Exit
+    const dismiss = () => {
+      screenOpacity.value = withDelay(2200, withTiming(0, { duration: 500 }, () => {
+        if (onFinish) runOnJS(onFinish)();
+      }));
+    };
+    dismiss();
   }, []);
 
   return (
-    <Animated.View style={[styles.container, screenStyle]}>
+    <Animated.View style={[styles.root, screenStyle]}>
+      <StatusBar barStyle="light-content" backgroundColor={Colors.bg.void} />
+
+      {/* Deep void background */}
+      <View style={StyleSheet.absoluteFill} />
+
+      {/* Ambient gradient */}
       <LinearGradient
-        colors={[Colors.background, '#0F0F1A', '#14141F']}
-        style={StyleSheet.absoluteFill}
+        colors={['rgba(230,57,70,0.08)', 'rgba(108,99,255,0.06)', 'rgba(7,7,9,0)']}
+        locations={[0, 0.5, 1]}
+        style={styles.ambientGradient}
       />
 
-      {/* Ambient glow */}
-      <View style={styles.glowContainer}>
-        <View style={styles.glowRed} />
-        <View style={styles.glowIndigo} />
-      </View>
+      {/* Particle rings */}
+      <Animated.View style={[styles.particle, styles.particle1, p1Style]} />
+      <Animated.View style={[styles.particle, styles.particle2, p2Style]} />
+      <Animated.View style={[styles.particle, styles.particle3, p3Style]} />
 
-      {/* Logo */}
-      <Animated.View style={[styles.logoContainer, logoStyle]}>
-        <Image
-          source={require('../../assets/icon.png')}
-          style={styles.logoIcon}
-          contentFit="contain"
-        />
-        <View style={styles.logoBox}>
-          {/* Shimmer overlay */}
-          <Animated.View style={[styles.shimmer, shimmerStyle]} />
-          <Text style={styles.logoC}>C</Text>
-          <Text style={styles.logoRest}>INE</Text>
-        </View>
-        <View style={styles.logoAIBadge}>
-          <Text style={styles.logoAIText}>AI</Text>
+      {/* Glow halo */}
+      <Animated.View style={[styles.glow, glowStyle]} />
+
+      {/* Logo group */}
+      <Animated.View style={[styles.logoGroup, logoStyle]}>
+        {/* CineAI wordmark */}
+        <View style={styles.wordmarkRow}>
+          <Animated.Text style={styles.wordmarkCine}>CINE</Animated.Text>
+          <View style={styles.aiPill}>
+            <Animated.Text style={styles.wordmarkAI}>AI</Animated.Text>
+          </View>
         </View>
       </Animated.View>
 
       {/* Tagline */}
-      <Animated.View style={[styles.taglineContainer, taglineStyle]}>
-        <Text style={styles.tagline}>Your Personal AI Movie Companion</Text>
-        <View style={styles.dotsRow}>
-          <View style={[styles.dot, styles.dotActive]} />
-          <View style={styles.dot} />
-          <View style={styles.dot} />
-        </View>
-      </Animated.View>
+      <Animated.Text style={[styles.tagline, taglineStyle]}>
+        Your AI Cinema Companion
+      </Animated.Text>
     </Animated.View>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  root: {
     flex: 1,
+    backgroundColor: Colors.bg.void,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Colors.background,
   },
-  glowContainer: {
+  ambientGradient: {
     ...StyleSheet.absoluteFillObject,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
-  glowRed: {
+  glow: {
     position: 'absolute',
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: 'rgba(230, 57, 70, 0.08)',
-    transform: [{ translateX: -80 }],
+    width: 240,
+    height: 240,
+    borderRadius: 120,
+    backgroundColor: Colors.accent.crimsonGlow,
   },
-  glowIndigo: {
+  particle: {
     position: 'absolute',
-    width: 250,
-    height: 250,
-    borderRadius: 125,
-    backgroundColor: 'rgba(108, 99, 255, 0.06)',
-    transform: [{ translateX: 80 }, { translateY: 40 }],
+    borderRadius: 9999,
+    borderWidth: 1,
+    borderColor: Colors.accent.crimson,
   },
-  logoContainer: {
-    alignItems: 'center',
-    marginBottom: Spacing['4xl'],
+  particle1: {
+    width: 100,
+    height: 100,
   },
-  logoIcon: {
-    width: 110,
-    height: 110,
-    borderRadius: 24,
-    marginBottom: Spacing.md,
+  particle2: {
+    width: 80,
+    height: 80,
+    borderColor: Colors.accent.electric,
   },
-  logoBox: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    overflow: 'hidden',
-    position: 'relative',
-  },
-  shimmer: {
-    position: 'absolute',
-    top: 0,
-    bottom: 0,
+  particle3: {
     width: 60,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-    transform: [{ skewX: '-20deg' }],
-    zIndex: 10,
+    height: 60,
+    borderColor: Colors.accent.gold,
   },
-  logoC: {
-    fontSize: 72,
+  logoGroup: {
+    alignItems: 'center',
+    gap: 0,
+  },
+  wordmarkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  wordmarkCine: {
+    fontSize: 44,
     fontFamily: 'Poppins_700Bold',
-    color: Colors.primary,
-    letterSpacing: -2,
-    lineHeight: 80,
+    color: Colors.text.primary,
+    letterSpacing: 4,
   },
-  logoRest: {
-    fontSize: 72,
+  aiPill: {
+    backgroundColor: Colors.accent.crimson,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    shadowColor: Colors.accent.crimson,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.8,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  wordmarkAI: {
+    fontSize: 26,
     fontFamily: 'Poppins_700Bold',
-    color: Colors.textPrimary,
-    letterSpacing: -2,
-    lineHeight: 80,
-  },
-  logoAIBadge: {
-    backgroundColor: Colors.primary,
-    paddingHorizontal: Spacing.md,
-    paddingVertical: 3,
-    borderRadius: 100,
-    marginTop: -Spacing.xs,
-    alignSelf: 'flex-end',
-    marginLeft: Spacing.sm,
-  },
-  logoAIText: {
-    color: Colors.white,
-    fontSize: Typography.sm,
-    fontFamily: 'Inter_700Bold',
+    color: Colors.text.onAccent,
     letterSpacing: 2,
   },
-  taglineContainer: {
-    alignItems: 'center',
-    position: 'absolute',
-    bottom: 80,
-  },
   tagline: {
-    color: Colors.textSecondary,
-    fontSize: Typography.base,
-    fontFamily: 'Inter_400Regular',
-    letterSpacing: 0.5,
-  },
-  dotsRow: {
-    flexDirection: 'row',
-    marginTop: Spacing.lg,
-    gap: Spacing.sm,
-  },
-  dot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: Colors.border,
-  },
-  dotActive: {
-    backgroundColor: Colors.primary,
-    width: 20,
-    borderRadius: 3,
+    position: 'absolute',
+    bottom: H * 0.18,
+    fontSize: 13,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.text.tertiary,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
   },
 });
 

@@ -99,9 +99,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       await AsyncStorage.setItem('user', JSON.stringify(user));
       await AsyncStorage.setItem('profile', JSON.stringify(profile));
       await AsyncStorage.setItem('isGuest', 'false');
-      await AsyncStorage.setItem('hasCompletedOnboarding', 'false');
+      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
 
-      set({ user, profile, isAuthenticated: true, isGuest: false, hasCompletedOnboarding: false });
+      set({ user, profile, isAuthenticated: true, isGuest: false, hasCompletedOnboarding: true });
+
     } catch (error) {
       console.error('Sign In error:', error);
       throw error;

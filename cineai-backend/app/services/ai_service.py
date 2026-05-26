@@ -9,12 +9,13 @@ logger = logging.getLogger("cineai-ai-service")
 class AIService:
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent"
+        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemma-4-31b-it:generateContent"
 
     async def generate_chat_response(self, prompt: str, chat_context: List[Dict] = None) -> str:
-        """Sends the user message alongside context to Google Gemini to fetch conversational responses."""
+        """Sends the user message alongside context to Google Gemma 4 to fetch conversational responses."""
         if not self.api_key or self.api_key == "AIzaSyD_dummy_gemini_key":
             return "Cine AI is operating in preview mode. Set a valid GEMINI_API_KEY in your env settings to experience real conversations."
+
 
         # Compile system prompts with strict cinematic personas and structured JSON requirements
         system_instruction = (
@@ -61,11 +62,16 @@ class AIService:
                 url = f"{self.base_url}?key={self.api_key}"
                 payload = {
                     "contents": formatted_contents,
+                    "tools": [{"googleSearch": {}}],
                     "generationConfig": {
                         "temperature": 0.8,
                         "maxOutputTokens": 600,
+                        "thinkingConfig": {
+                            "thinkingLevel": "HIGH"
+                        }
                     }
                 }
+
                 response = await client.post(url, headers=headers, json=payload, timeout=20.0)
                 if response.status_code == 200:
                     result = response.json()
