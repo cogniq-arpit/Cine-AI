@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     
     # Third-Party Credentials
     GEMINI_API_KEY: str = Field(default="", env="GEMINI_API_KEY")
+    GEMINI_MODEL: str = Field(default="gemini-3.5-flash", env="GEMINI_MODEL")
+    GEMINI_API_BASE_URL: str = Field(default="https://generativelanguage.googleapis.com/v1beta", env="GEMINI_API_BASE_URL")
+    GEMINI_TIMEOUT_SECONDS: float = Field(default=30.0, env="GEMINI_TIMEOUT_SECONDS")
     TMDB_API_KEY: str = Field(default="dummy_tmdb_key", env="TMDB_API_KEY")
     TMDB_ACCESS_TOKEN: str = Field(default="dummy_tmdb_token", env="TMDB_ACCESS_TOKEN")
     

@@ -342,6 +342,7 @@ export const OnboardingScreen: React.FC = () => {
 
         {/* Continue as Guest underline link */}
         <Pressable style={styles.guestBtn} onPress={handleGuest}>
+          <Ionicons name="person-circle-outline" size={15} color="#8e8e93" />
           <Text style={styles.guestText} allowFontScaling={false}>
             Continue as Guest
           </Text>
@@ -607,6 +608,9 @@ const styles = StyleSheet.create({
   },
   guestBtn: {
     alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
     paddingVertical: 4,
   },
   guestText: {

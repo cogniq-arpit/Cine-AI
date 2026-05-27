@@ -17,15 +17,13 @@ import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors, Radius, Motion } from '../../constants/theme';
 import { useAuthStore } from '../../store/authStore';
-import type { Movie, RootStackParamList } from '../../types';
+import type { Movie } from '../../types';
 import { tmdbApi } from '../../services/tmdbApi';
 
 const { width: W, height: H } = Dimensions.get('window');
 const HERO_HEIGHT = H * 0.58;
-type HomeNav = NativeStackNavigationProp<RootStackParamList>;
 
 // ─── Hardcoded curated movies with verified Amazon CDN URLs ──────────────────
 // These URLs are stable Amazon CDN links that do NOT require an API key.
@@ -366,6 +364,7 @@ const SectionHeader: React.FC<{ title: string; subtitle?: string; onSeeAll?: () 
     </View>
     {onSeeAll && (
       <Pressable onPress={onSeeAll} style={secStyles.seeAllBtn}>
+        <Ionicons name="grid-outline" size={13} color={Colors.accent.crimson} />
         <Text style={secStyles.seeAllText} allowFontScaling={false}>See all</Text>
         <Ionicons name="chevron-forward" size={14} color={Colors.accent.crimson} />
       </Pressable>
@@ -519,7 +518,7 @@ const heroStyles = StyleSheet.create({
 // ─── HomeScreen ────────────────────────────────────────────────────────────
 export const HomeScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<HomeNav>();
+  const navigation = useNavigation<any>();
   const { profile } = useAuthStore();
 
   // All sections initialized from CURATED data immediately for instant first-frame render
@@ -610,7 +609,9 @@ export const HomeScreen: React.FC = () => {
           </Pressable>
           <Pressable
             style={styles.avatarBtn}
-            onPress={() => navigation.navigate('Main' as any)}
+            onPress={() => navigation.navigate('Profile')}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
           >
             <View style={styles.avatar}>
               <Text style={styles.avatarText} allowFontScaling={false}>

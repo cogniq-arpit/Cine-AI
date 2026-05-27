@@ -2,7 +2,6 @@ import { create } from 'zustand';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { ChatSession, ChatMessage, Movie } from '../types';
 import { useAuthStore } from './authStore';
-import aiService from '../services/ai';
 import { chatService } from '../services/api/chatService';
 import tmdbApi from '../services/tmdbApi';
 
@@ -13,6 +12,7 @@ interface ChatStore {
   currentSession: ChatSession | null;
   isLoading: boolean;
   isSending: boolean;
+  error: string | null;
 
   loadSessions: () => Promise<void>;
   createSession: (title?: string) => Promise<ChatSession>;
@@ -56,6 +56,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
   currentSession: null,
   isLoading: false,
   isSending: false,
+  error: null,
 
   loadSessions: async () => {
     set({ isLoading: true });
@@ -128,7 +129,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
 
     const updatedMessages = [...(session.messages || []), userMessage];
     const updatedSession = { ...session, messages: updatedMessages };
-    set({ currentSession: updatedSession, isSending: true });
+    set({ currentSession: updatedSession, isSending: true, error: null });
 
     let assistantMessage: ChatMessage | null = null;
 
@@ -138,7 +139,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         const clean = rawContent.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
         const parsed = JSON.parse(clean);
         if (parsed && typeof parsed === 'object' && parsed.message) {
-          const queries = parsed.movieSearchQueries || [];
+          const queries = Array.isArray(parsed.movieSearchQueries) ? parsed.movieSearchQueries : [];
           const movies: Movie[] = [];
           for (const title of queries.slice(0, 5)) {
             if (title?.trim()) {
@@ -156,7 +157,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           return {
             text: parsed.message,
             movies,
-            tags: parsed.moodTags || ['curated']
+            tags: parsed.moodTags || []
           };
         }
       } catch (err) {
@@ -177,27 +178,23 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       const isLoggedIn = !!useAuthStore.getState().user && !useAuthStore.getState().isGuest;
 
       if (isLoggedIn) {
-        try {
-          const backendRes = await chatService.postMessage(session.id, content);
-          const parsedRes = await parseBackendJSONAndFetch(backendRes.content);
-          
-          assistantMessage = {
-            id: generateMsgId(),
-            role: 'assistant',
-            content: parsedRes.text,
-            movies: parsedRes.movies.map((movie: Movie) => ({
-              movie,
-              reason: 'AI recommended based on your request',
-              mood_tags: parsedRes.tags,
-            })),
-            timestamp: new Date().toISOString(),
-          };
-        } catch (backendErr) {
-          console.warn('FastAPI Chat backend failed. Falling back to Guest secure handler...', backendErr);
-        }
+        const backendRes = await chatService.postMessage(session.id, content);
+        const parsedRes = await parseBackendJSONAndFetch(backendRes.content);
+        
+        assistantMessage = {
+          id: generateMsgId(),
+          role: 'assistant',
+          content: parsedRes.text,
+          movies: parsedRes.movies.map((movie: Movie) => ({
+            movie,
+            reason: 'AI recommended based on your request',
+            mood_tags: parsedRes.tags,
+          })),
+          timestamp: new Date().toISOString(),
+        };
       }
 
-      // If backend failed OR user is a guest, use our secure FastAPI guest chatbot proxy!
+      // Guests use the secure FastAPI proxy. Authenticated failures are surfaced instead of bypassing auth.
       if (!assistantMessage) {
         const historyContext = (session.messages || []).map(msg => ({
           role: msg.role,
@@ -241,12 +238,16 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(updatedSessions));
     } catch (error) {
       console.error('Send message failure:', error);
-      // Fallback: still update the list with user prompt even if AI is fully disconnected
+      const finalSession: ChatSession = { ...updatedSession, updated_at: new Date().toISOString() };
       const { sessions } = get();
       const updatedSessions = sessions.map(s =>
-        s.id === session!.id ? updatedSession : s
+        s.id === session!.id ? finalSession : s
       );
-      set({ sessions: updatedSessions });
+      const detail = (error as any)?.response?.data?.detail;
+      const message = typeof detail === 'string'
+        ? detail
+        : detail?.message || 'CineAI could not reach the live AI provider. Check backend Gemini configuration and try again.';
+      set({ currentSession: finalSession, sessions: updatedSessions, error: message });
       await AsyncStorage.setItem(SESSIONS_KEY, JSON.stringify(updatedSessions));
     } finally {
       set({ isSending: false });

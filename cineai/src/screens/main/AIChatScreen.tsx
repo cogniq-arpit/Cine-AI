@@ -20,15 +20,14 @@ import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors, Radius, Motion, Spacing } from '../../constants/theme';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
-import type { ChatMessage, Movie, RootStackParamList } from '../../types';
+import type { ChatMessage, Movie } from '../../types';
 import { VoiceWave } from '../../components/ui/VoiceWave';
 
 const { width: W, height: H } = Dimensions.get('window');
-type ChatNav = NativeStackNavigationProp<RootStackParamList>;
+type ChatNav = any;
 
 const MOCK_SPEECH_PHRASES = [
   'Recommend a highly immersive, futuristic sci-fi film with deep philosophical themes',
@@ -50,6 +49,18 @@ const SUGGESTION_CHIPS = [
   { id: '2', icon: 'heart-outline', label: 'Match my mood', query: 'What should I watch based on a relaxed evening mood?' },
   { id: '3', icon: 'trending-up', label: 'Top rated 2024', query: 'What are the best-reviewed films from 2024?' },
   { id: '4', icon: 'bulb-outline', label: 'Mind-bending', query: 'I want a film that will make me question everything' },
+  { id: '5', icon: 'business-outline', label: 'Corporate thriller', query: 'Recommend a sharp corporate or financial thriller with intelligent pacing' },
+  { id: '6', icon: 'rainy-outline', label: 'Rainy night', query: 'Suggest a moody rainy-night film with atmospheric cinematography' },
+  { id: '7', icon: 'rocket-outline', label: 'Space epic', query: 'Recommend a grand space epic with emotional stakes and premium visuals' },
+  { id: '8', icon: 'library-outline', label: 'Modern classic', query: 'Give me a modern classic that feels essential and rewatchable' },
+  { id: '9', icon: 'people-outline', label: 'Group watch', query: 'Recommend a crowd-pleasing movie for a mixed group of friends' },
+  { id: '10', icon: 'search-outline', label: 'Hidden gem', query: 'Find a hidden gem that deserves more attention' },
+  { id: '11', icon: 'color-palette-outline', label: 'Visual feast', query: 'Suggest a movie with extraordinary production design and color' },
+  { id: '12', icon: 'timer-outline', label: 'Under 2 hours', query: 'Recommend a tightly paced excellent movie under two hours' },
+  { id: '13', icon: 'planet-outline', label: 'Sci-fi noir', query: 'I want a sci-fi noir with mystery, style, and big ideas' },
+  { id: '14', icon: 'musical-notes-outline', label: 'Great score', query: 'Recommend a film with an unforgettable score and cinematic scale' },
+  { id: '15', icon: 'shield-checkmark-outline', label: 'Prestige pick', query: 'Give me a prestige drama with outstanding acting and direction' },
+  { id: '16', icon: 'flame-outline', label: 'High tension', query: 'Recommend a tense movie that grips from the first scene' },
 ];
 
 const PREVIEW_HIGHLIGHTS = [
@@ -76,6 +87,46 @@ const PREVIEW_HIGHLIGHTS = [
     poster: 'https://image.tmdb.org/t/p/w500/qJ2tWw7512l29i1KjGo8qG71wCc.jpg',
     desc: 'Gotham\'s Guardian',
     movieId: 468569
+  },
+  {
+    id: 4,
+    title: 'Blade Runner 2049',
+    match: 93,
+    poster: 'https://image.tmdb.org/t/p/w500/r4FGhQIrB7pOvHTkl8PZB6FYSdK.jpg',
+    desc: 'Future Noir',
+    movieId: 1856101
+  },
+  {
+    id: 5,
+    title: 'Parasite',
+    match: 92,
+    poster: 'https://image.tmdb.org/t/p/w500/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg',
+    desc: 'Class Tension',
+    movieId: 6751668
+  },
+  {
+    id: 6,
+    title: 'Inception',
+    match: 91,
+    poster: 'https://image.tmdb.org/t/p/w500/edv5CZvWj09upOsy2Y6IwDhK8bt.jpg',
+    desc: 'Dream Heist',
+    movieId: 1375666
+  },
+  {
+    id: 7,
+    title: 'La La Land',
+    match: 90,
+    poster: 'https://image.tmdb.org/t/p/w500/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg',
+    desc: 'Melancholy Glow',
+    movieId: 3783958
+  },
+  {
+    id: 8,
+    title: 'Arrival',
+    match: 89,
+    poster: 'https://image.tmdb.org/t/p/w500/x2FJsf1ElAgr63Y3PNPtJrcmpoe.jpg',
+    desc: 'Elegant Sci-Fi',
+    movieId: 329865
   }
 ];
 
@@ -312,6 +363,17 @@ const WelcomeState: React.FC<{
   onChipPress: (query: string) => void;
   onPreviewPress: (id: number) => void;
 }> = ({ onChipPress, onPreviewPress }) => {
+  const [promptPages, setPromptPages] = useState(4);
+  const promptLibrary = React.useMemo(
+    () => Array.from({ length: promptPages }).flatMap((_, page) =>
+      SUGGESTION_CHIPS.map(chip => ({
+        ...chip,
+        id: `${chip.id}-${page}`,
+      }))
+    ),
+    [promptPages]
+  );
+
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
@@ -349,22 +411,24 @@ const WelcomeState: React.FC<{
       {/* Horizontally Scrolling Quick Actions */}
       <View style={welcomeStyles.section}>
         <Text style={welcomeStyles.sectionTitle} allowFontScaling={false}>Rapid Prompt Capsules</Text>
-        <ScrollView
+        <FlatList
+          data={promptLibrary}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={welcomeStyles.pillsContainer}
-        >
-          {SUGGESTION_CHIPS.map(chip => (
+          keyExtractor={chip => chip.id}
+          onEndReached={() => setPromptPages(page => page + 2)}
+          onEndReachedThreshold={0.55}
+          renderItem={({ item: chip }) => (
             <Pressable
-              key={chip.id}
               style={({ pressed }) => [welcomeStyles.pillChip, pressed && { transform: [{ scale: 0.98 }] }]}
               onPress={() => onChipPress(chip.query)}
             >
               <Ionicons name={chip.icon as any} size={11} color={Colors.accent.crimson} />
               <Text style={welcomeStyles.pillText} allowFontScaling={false}>{chip.label}</Text>
             </Pressable>
-          ))}
-        </ScrollView>
+          )}
+        />
       </View>
 
       {/* AI Curated Highlights Preview */}
@@ -432,7 +496,7 @@ export const AIChatScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<ChatNav>();
   const {
-    sessions, currentSession, isSending, sendMessage,
+    sessions, currentSession, isSending, error, sendMessage,
     createSession, loadSession, deleteSession, loadSessions
   } = useChatStore();
 
@@ -556,6 +620,14 @@ export const AIChatScreen: React.FC = () => {
       {/* Sticky Compact Header */}
       <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <View style={styles.headerLeft}>
+          <Pressable
+            style={styles.headerBtn}
+            onPress={() => navigation.navigate('Home')}
+            accessibilityRole="button"
+            accessibilityLabel="Go to home"
+          >
+            <Ionicons name="home-outline" size={18} color={Colors.text.secondary} />
+          </Pressable>
           <LinearGradient colors={[Colors.accent.orbStart, Colors.accent.orbEnd]} style={styles.headerOrb}>
             <Ionicons name="sparkles" size={12} color={Colors.text.onAccent} />
           </LinearGradient>
@@ -567,12 +639,24 @@ export const AIChatScreen: React.FC = () => {
             </View>
           </View>
         </View>
-        <Pressable style={styles.headerBtn} onPress={() => setHistoryVisible(true)}>
-          <Ionicons name="time-outline" size={20} color={Colors.text.secondary} />
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable style={styles.headerBtn} onPress={handleStartNewChat} accessibilityRole="button" accessibilityLabel="Start new chat">
+            <Ionicons name="add" size={20} color={Colors.text.secondary} />
+          </Pressable>
+          <Pressable style={styles.headerBtn} onPress={() => setHistoryVisible(true)} accessibilityRole="button" accessibilityLabel="Open chat history">
+            <Ionicons name="time-outline" size={20} color={Colors.text.secondary} />
+          </Pressable>
+        </View>
       </View>
 
       {/* Dynamic Content View */}
+      {!!error && (
+        <View style={styles.errorBanner}>
+          <Ionicons name="alert-circle-outline" size={16} color={Colors.semantic.error} />
+          <Text style={styles.errorBannerText} allowFontScaling={false}>{error}</Text>
+        </View>
+      )}
+
       {isEmpty ? (
         <WelcomeState
           onChipPress={handleChipPress}
@@ -743,6 +827,7 @@ export const AIChatScreen: React.FC = () => {
               ))}
             </View>
             <Pressable style={styles.optionsCloseBtn} onPress={() => setOptionsVisible(false)}>
+              <Ionicons name="close-outline" size={18} color={Colors.text.secondary} />
               <Text style={styles.optionsCloseText} allowFontScaling={false}>Cancel</Text>
             </Pressable>
           </View>
@@ -762,6 +847,7 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   headerOrb: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 15, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, letterSpacing: 0.2 },
   onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
@@ -773,6 +859,27 @@ const styles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
   },
   listContent: { paddingTop: 16, paddingBottom: 170 },
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: Radius.md,
+    backgroundColor: Colors.semantic.errorMuted,
+    borderWidth: 1,
+    borderColor: `${Colors.semantic.error}40`,
+    zIndex: 20,
+  },
+  errorBannerText: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.semantic.error,
+    lineHeight: 16,
+  },
   inputBar: {
     position: 'absolute', left: 20, right: 20,
     borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
@@ -870,7 +977,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14, paddingVertical: 10,
   },
   optionsGridLabel: { fontSize: 12, fontFamily: 'Inter_500Medium', color: Colors.text.primary },
-  optionsCloseBtn: { alignSelf: 'stretch', paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.lg, backgroundColor: Colors.bg.raised },
+  optionsCloseBtn: { alignSelf: 'stretch', paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.lg, backgroundColor: Colors.bg.raised, flexDirection: 'row', gap: 8 },
   optionsCloseText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text.secondary },
 });
 

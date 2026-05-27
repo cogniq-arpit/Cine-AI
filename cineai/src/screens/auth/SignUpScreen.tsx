@@ -261,12 +261,16 @@ export const SignUpScreen: React.FC = () => {
               {isLoading ? (
                 <ActivityIndicator size="small" color={Colors.text.onAccent} />
               ) : (
-                <Text style={styles.signUpText} allowFontScaling={false}>Create Account</Text>
+                <View style={styles.btnContent}>
+                  <Ionicons name="person-add-outline" size={18} color={Colors.text.onAccent} />
+                  <Text style={styles.signUpText} allowFontScaling={false}>Create Account</Text>
+                </View>
               )}
             </LinearGradient>
           </Pressable>
 
           <Pressable style={styles.loginRow} onPress={() => navigation.navigate('Login')}>
+            <Ionicons name="log-in-outline" size={15} color={Colors.accent.crimson} />
             <Text style={styles.loginPrompt} allowFontScaling={false}>Already have an account? </Text>
             <Text style={styles.loginLink} allowFontScaling={false}>Sign In</Text>
           </Pressable>
@@ -293,9 +297,10 @@ const styles = StyleSheet.create({
   errorText: { flex: 1, fontSize: 13, fontFamily: 'Inter_400Regular', color: Colors.semantic.error },
   signUpBtn: { borderRadius: Radius.lg, overflow: 'hidden', shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.4, shadowRadius: 16, elevation: 8, marginTop: 8, marginBottom: 24 },
   btnGradient: { paddingVertical: 18, alignItems: 'center' },
+  btnContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   btnPressed: { opacity: 0.88, transform: [{ scale: 0.98 }] },
   signUpText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: Colors.text.onAccent, letterSpacing: 0.5 },
-  loginRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center' },
+  loginRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 4 },
   loginPrompt: { fontSize: 14, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
   loginLink: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimson },
 });

@@ -341,6 +341,7 @@ export const LoginScreen: React.FC = () => {
             style={styles.forgotBtn}
             onPress={() => navigation.navigate('ForgotPassword')}
           >
+            <Ionicons name="key-outline" size={14} color={Colors.accent.crimson} />
             <Text style={styles.forgotText} allowFontScaling={false}>
               Forgot password?
             </Text>
@@ -361,7 +362,10 @@ export const LoginScreen: React.FC = () => {
               {isLoading ? (
                 <ActivityIndicator size="small" color={Colors.text.onAccent} />
               ) : (
-                <Text style={styles.signInText} allowFontScaling={false}>Sign In</Text>
+                <View style={styles.btnContent}>
+                  <Ionicons name="log-in-outline" size={18} color={Colors.text.onAccent} />
+                  <Text style={styles.signInText} allowFontScaling={false}>Sign In</Text>
+                </View>
               )}
             </LinearGradient>
           </Pressable>
@@ -378,6 +382,7 @@ export const LoginScreen: React.FC = () => {
             style={styles.signupRow}
             onPress={() => navigation.navigate('SignUp')}
           >
+            <Ionicons name="person-add-outline" size={15} color={Colors.accent.crimson} />
             <Text style={styles.signupPrompt} allowFontScaling={false}>
               Don't have an account?{' '}
             </Text>
@@ -491,6 +496,9 @@ const styles = StyleSheet.create({
   },
   forgotBtn: {
     alignSelf: 'flex-end',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
     marginTop: -8,
     marginBottom: 24,
     paddingVertical: 4,
@@ -513,6 +521,12 @@ const styles = StyleSheet.create({
   btnGradient: {
     paddingVertical: 18,
     alignItems: 'center',
+  },
+  btnContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
   },
   btnPressed: {
     opacity: 0.88,
@@ -544,6 +558,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
+    gap: 4,
   },
   signupPrompt: {
     fontSize: 14,

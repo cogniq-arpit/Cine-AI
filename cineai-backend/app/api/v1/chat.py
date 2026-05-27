@@ -14,9 +14,33 @@ from app.schemas.chat import (
     GuestChatMessageCreate,
     GuestChatMessageResponse,
 )
-from app.services.ai_service import ai_service
+from app.services.ai_service import AIConfigurationError, AIProviderError, ai_service
 
 router = APIRouter(tags=["AI Chatbot"])
+
+
+def raise_ai_http_error(error: AIProviderError) -> None:
+    status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+    if isinstance(error, AIConfigurationError):
+        status_code = status.HTTP_500_INTERNAL_SERVER_ERROR
+    elif error.status_code in {400, 401, 403, 404, 429}:
+        status_code = status.HTTP_502_BAD_GATEWAY
+
+    raise HTTPException(
+        status_code=status_code,
+        detail={
+            "error": error.__class__.__name__,
+            "message": str(error),
+            "provider_status": error.status_code,
+            "provider_detail": error.provider_detail,
+        },
+    )
+
+
+@router.get("/diagnostics")
+async def get_chat_diagnostics():
+    """Returns non-secret AI provider diagnostics for deployment validation."""
+    return ai_service.diagnostics()
 
 
 @router.post("/message", response_model=ChatMessageResponse)
@@ -47,8 +71,12 @@ async def post_chat_message(
     
     context = [{"role": msg.message_role, "content": msg.content} for msg in messages]
     
-    # 3. Call Gemini
-    ai_response = await ai_service.generate_chat_response(schema.prompt, context[:-1])
+    # 3. Call Gemini. Do not mask provider failure as static AI content.
+    try:
+        ai_response = await ai_service.generate_chat_response(schema.prompt, context[:-1])
+    except AIProviderError as error:
+        await db.rollback()
+        raise_ai_http_error(error)
     
     # 4. Save Assistant Response
     assistant_msg = ChatHistory(
@@ -92,6 +120,8 @@ async def post_guest_chat_message(
             "content": msg.get("content", "")
         })
     
-    ai_response = await ai_service.generate_chat_response(schema.prompt, mapped_context)
+    try:
+        ai_response = await ai_service.generate_chat_response(schema.prompt, mapped_context)
+    except AIProviderError as error:
+        raise_ai_http_error(error)
     return GuestChatMessageResponse(content=ai_response)
-

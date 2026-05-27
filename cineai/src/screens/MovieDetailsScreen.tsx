@@ -197,6 +197,7 @@ export const MovieDetailsScreen: React.FC = () => {
         <Ionicons name="alert-circle" size={48} color={Colors.text.tertiary} />
         <Text style={styles.errorText} allowFontScaling={false}>Failed to retrieve title details.</Text>
         <Pressable style={styles.backBtnPill} onPress={() => navigation.goBack()}>
+          <Ionicons name="arrow-back-outline" size={16} color={Colors.text.onAccent} />
           <Text style={styles.backBtnText} allowFontScaling={false}>Return Back</Text>
         </Pressable>
       </View>
@@ -331,7 +332,16 @@ export const MovieDetailsScreen: React.FC = () => {
             </Text>
             {movie.overview.length > 180 && (
               <Pressable onPress={() => setExpanded(e => !e)} hitSlop={12}>
-                <Text style={styles.expandLabel} allowFontScaling={false}>{expanded ? 'Read Less ↑' : 'Read Full Overview ↓'}</Text>
+                <View style={styles.expandRow}>
+                  <Ionicons
+                    name={expanded ? 'chevron-up-outline' : 'chevron-down-outline'}
+                    size={15}
+                    color={Colors.accent.crimson}
+                  />
+                  <Text style={styles.expandLabel} allowFontScaling={false}>
+                    {expanded ? 'Read Less' : 'Read Full Overview'}
+                  </Text>
+                </View>
               </Pressable>
             )}
           </View>
@@ -380,6 +390,7 @@ const styles = StyleSheet.create({
   center: { alignItems: 'center', justifyContent: 'center', gap: 14, paddingHorizontal: 40 },
   errorText: { fontSize: 14, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, textAlign: 'center' },
   backBtnPill: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: Colors.accent.crimson, borderRadius: Radius.full,
     paddingHorizontal: 20, paddingVertical: 12, marginTop: 8,
   },
@@ -424,7 +435,8 @@ const styles = StyleSheet.create({
   section: { marginBottom: 24 },
   sectionTitle: { fontSize: 16, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, marginBottom: 12 },
   overview: { fontSize: 14, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, lineHeight: 22 },
-  expandLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimson, marginTop: 8 },
+  expandRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
+  expandLabel: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimson },
   directorRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.glass.border,

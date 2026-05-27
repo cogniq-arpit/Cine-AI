@@ -17,6 +17,15 @@ export interface VoiceSessionResponse {
   created_at: string;
 }
 
+export interface ChatDiagnosticsResponse {
+  provider: string;
+  model: string;
+  base_url: string;
+  api_key_configured: boolean;
+  api_key_length: number;
+  timeout_seconds: number;
+}
+
 export const chatService = {
   /**
    * Submits a user prompt message to the chatbot.
@@ -46,6 +55,11 @@ export const chatService = {
    */
   getHistory: async (sessionToken: string): Promise<ChatMessageResponse[]> => {
     const response = await apiClient.get<ChatMessageResponse[]>(`/chat/history/${sessionToken}`);
+    return response.data;
+  },
+
+  getDiagnostics: async (): Promise<ChatDiagnosticsResponse> => {
+    const response = await apiClient.get<ChatDiagnosticsResponse>('/chat/diagnostics');
     return response.data;
   },
 

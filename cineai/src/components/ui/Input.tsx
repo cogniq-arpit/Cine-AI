@@ -13,6 +13,7 @@ import Animated, {
   useAnimatedStyle,
   withTiming,
 } from 'react-native-reanimated';
+import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants/theme';
 
 interface InputProps extends TextInputProps {
@@ -79,7 +80,11 @@ export const Input: React.FC<InputProps> = ({
         
         {showPasswordToggle && (
           <Pressable onPress={() => setIsPasswordVisible(prev => !prev)} style={styles.rightIcon}>
-            <Text style={styles.passwordToggle}>{isPasswordVisible ? '🙈' : '👁'}</Text>
+            <Ionicons
+              name={isPasswordVisible ? 'eye-off-outline' : 'eye-outline'}
+              size={18}
+              color={Colors.textTertiary}
+            />
           </Pressable>
         )}
         
@@ -163,9 +168,6 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_400Regular',
     marginTop: Spacing.xs,
     marginLeft: Spacing.xs,
-  },
-  passwordToggle: {
-    fontSize: 16,
   },
 });
 

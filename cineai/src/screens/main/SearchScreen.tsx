@@ -146,6 +146,7 @@ export const SearchScreen: React.FC = () => {
 
         <Animated.View style={cancelStyle}>
           <Pressable onPress={handleCancel} style={st.cancelBtn}>
+            <Ionicons name="close-outline" size={16} color={Colors.accent.crimson} />
             <Text style={st.cancelText} allowFontScaling={false}>Cancel</Text>
           </Pressable>
         </Animated.View>
@@ -239,7 +240,7 @@ const st = StyleSheet.create({
   searchIcon: { marginRight: 10 },
   input: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', color: Colors.text.primary },
   clearBtn: { padding: 4 },
-  cancelBtn: { paddingHorizontal: 4, height: 48, justifyContent: 'center' },
+  cancelBtn: { paddingHorizontal: 4, height: 48, justifyContent: 'center', flexDirection: 'row', alignItems: 'center', gap: 4 },
   cancelText: { fontSize: 14, fontFamily: 'Inter_500Medium', color: Colors.accent.crimson },
   section: { marginBottom: 28, paddingHorizontal: 20 },
   sectionTitle: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, marginBottom: 14 },

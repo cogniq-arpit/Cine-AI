@@ -181,8 +181,14 @@ export const ProfileScreen: React.FC = () => {
             style={({ pressed }) => [st.signOutBtn, pressed && { opacity: 0.75 }]}
             onPress={handleSignOut}
           >
-            <Ionicons name="log-out-outline" size={18} color={Colors.semantic.error} />
-            <Text style={st.signOutText} allowFontScaling={false}>Sign Out</Text>
+            <View style={st.signOutIcon}>
+              <Ionicons name="log-out-outline" size={20} color={Colors.semantic.error} />
+            </View>
+            <View style={st.signOutCopy}>
+              <Text style={st.signOutText} allowFontScaling={false}>Sign Out</Text>
+              <Text style={st.signOutSubtext} allowFontScaling={false}>End this secure CineAI session</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={Colors.semantic.error} />
           </Pressable>
         </View>
 
@@ -245,11 +251,18 @@ const st = StyleSheet.create({
   settingRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   settingValue: { fontSize: 13, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary },
   signOutBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 12,
     borderRadius: Radius.lg, borderWidth: 1, borderColor: `${Colors.semantic.error}40`,
-    backgroundColor: Colors.semantic.errorMuted, paddingVertical: 16,
+    backgroundColor: Colors.semantic.errorMuted, paddingVertical: 14, paddingHorizontal: 14,
   },
+  signOutIcon: {
+    width: 38, height: 38, borderRadius: 12,
+    backgroundColor: Colors.bg.void, alignItems: 'center', justifyContent: 'center',
+    borderWidth: 1, borderColor: `${Colors.semantic.error}30`,
+  },
+  signOutCopy: { flex: 1 },
   signOutText: { fontSize: 15, fontFamily: 'Inter_600SemiBold', color: Colors.semantic.error },
+  signOutSubtext: { fontSize: 11, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary, marginTop: 2 },
   version: { textAlign: 'center', fontSize: 11, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary, marginBottom: 8 },
 });
 

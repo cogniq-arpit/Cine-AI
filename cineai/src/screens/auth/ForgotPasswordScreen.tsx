@@ -124,7 +124,12 @@ export const ForgotPasswordScreen: React.FC = () => {
                 >
                   {isLoading
                     ? <ActivityIndicator size="small" color={Colors.text.onAccent} />
-                    : <Text style={styles.btnText} allowFontScaling={false}>Send Reset Email</Text>
+                    : (
+                      <View style={styles.btnContent}>
+                        <Ionicons name="mail-unread-outline" size={18} color={Colors.text.onAccent} />
+                        <Text style={styles.btnText} allowFontScaling={false}>Send Reset Email</Text>
+                      </View>
+                    )
                   }
                 </LinearGradient>
               </Pressable>
@@ -180,6 +185,7 @@ const styles = StyleSheet.create({
   input: { flex: 1, fontSize: 15, fontFamily: 'Inter_400Regular', color: Colors.text.primary },
   btn: { width: '100%', borderRadius: Radius.lg, overflow: 'hidden' },
   btnGrad: { paddingVertical: 18, alignItems: 'center' },
+  btnContent: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   btnText: { fontSize: 16, fontFamily: 'Inter_600SemiBold', color: Colors.text.onAccent },
 });
 

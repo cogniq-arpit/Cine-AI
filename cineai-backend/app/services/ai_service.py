@@ -1,207 +1,188 @@
-import httpx
-from typing import Dict, List, Optional
-from app.core.config import settings
 import json
 import logging
+from typing import Any, Dict, List
+
+import httpx
+
+from app.core.config import settings
 
 logger = logging.getLogger("cineai-ai-service")
+
+
+class AIProviderError(RuntimeError):
+    """Raised when Gemini cannot produce a valid live response."""
+
+    def __init__(self, message: str, *, status_code: int | None = None, provider_detail: str | None = None):
+        super().__init__(message)
+        self.status_code = status_code
+        self.provider_detail = provider_detail
+
+
+class AIConfigurationError(AIProviderError):
+    """Raised when the backend is missing required AI provider configuration."""
+
 
 class AIService:
     def __init__(self):
         self.api_key = settings.GEMINI_API_KEY
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+        self.model = settings.GEMINI_MODEL
+        self.base_url = settings.GEMINI_API_BASE_URL.rstrip("/")
+        self.timeout_seconds = settings.GEMINI_TIMEOUT_SECONDS
 
-    async def generate_chat_response(self, prompt: str, chat_context: List[Dict] = None) -> str:
-        """Sends the user message alongside context to Google Gemma 4 to fetch conversational responses."""
+    @property
+    def provider_url(self) -> str:
+        return f"{self.base_url}/models/{self.model}:generateContent"
+
+    def diagnostics(self) -> Dict[str, Any]:
+        return {
+            "provider": "google-gemini",
+            "model": self.model,
+            "base_url": self.base_url,
+            "api_key_configured": bool(self.api_key),
+            "api_key_length": len(self.api_key or ""),
+            "timeout_seconds": self.timeout_seconds,
+        }
+
+    def _assert_configured(self) -> None:
         if not self.api_key:
-            return "Cine AI is operating in preview mode. Set a valid GEMINI_API_KEY in your env settings to experience real conversations."
+            raise AIConfigurationError(
+                "GEMINI_API_KEY is not configured on the backend.",
+                provider_detail="Set GEMINI_API_KEY in the deployed backend environment.",
+            )
+        if not self.model:
+            raise AIConfigurationError(
+                "GEMINI_MODEL is not configured on the backend.",
+                provider_detail="Set GEMINI_MODEL to a Gemini model that supports generateContent.",
+            )
 
-
-        # Compile system prompts with strict cinematic personas and structured JSON requirements
-        system_instruction = (
-            "You are Cine AI — an elite cinematic intelligence and personal movie companion. "
-            "You feel like having a conversation with a brilliant, warm film critic who deeply understands emotions and moods.\n\n"
-            "Your personality:\n"
-            "- Conversational, warm, intelligent — like a trusted film critic friend\n"
-            "- You use rich, evocative language about cinema\n"
-            "- You understand emotional context: 'I just went through a breakup', 'I want to cry', 'I need something uplifting'\n"
-            "- You remember the conversation context and reference earlier messages naturally\n"
-            "- You are specific and opinionated, not generic\n\n"
-            "Response format — ALWAYS return valid JSON exactly like this:\n"
+    def _build_system_instruction(self) -> str:
+        return (
+            "You are Cine AI, an elite cinematic intelligence and personal movie companion. "
+            "You respond like a warm, specific, opinionated film critic. "
+            "Never use generic filler. Always adapt to the user's exact prompt, including people, directors, actors, genres, languages, moods, dates, and constraints.\n\n"
+            "Return ONLY strict JSON with this shape:\n"
             "{\n"
-            "  \"message\": \"Your warm, conversational response here (2-4 sentences max). Be natural and specific.\",\n"
+            "  \"message\": \"A natural 2-4 sentence response tailored to the user prompt.\",\n"
             "  \"movieSearchQueries\": [\"Exact Movie Title 1\", \"Exact Movie Title 2\", \"Exact Movie Title 3\"],\n"
-            "  \"moodTags\": [\"emotional\", \"cinematic\", \"tag3\"]\n"
+            "  \"moodTags\": [\"tag1\", \"tag2\", \"tag3\"]\n"
             "}\n\n"
             "Rules:\n"
-            "1. movieSearchQueries must be EXACT movie titles that exist in TMDB (real films only)\n"
-            "2. Recommend 3–6 movies that precisely match the request\n"
-            "3. Write engaging, emotionally intelligent messages — not generic lists\n"
-            "4. For conversational messages (greetings, thanks, etc.) use empty arrays for queries and tags\n"
-            "5. Always reference the specific genres, directors, moods or themes the user mentioned\n"
-            "6. moodTags should capture the emotional vibe (e.g. \"mind-bending\", \"tear-jerker\", \"hopeful\", \"dark\", \"nostalgic\")"
+            "1. movieSearchQueries must contain real film titles suitable for TMDB search.\n"
+            "2. For director or actor prompts, recommend movies strongly connected to that person.\n"
+            "3. For greetings or non-recommendation chatter, use empty arrays for movieSearchQueries and moodTags.\n"
+            "4. Do not wrap JSON in markdown fences.\n"
+            "5. Do not invent platform availability or ratings.\n"
+            "6. If you cannot satisfy the exact request, explain briefly in message and return the closest valid titles."
         )
 
-        formatted_contents = []
-        if chat_context:
-            for msg in chat_context:
-                formatted_contents.append({
-                    "role": "user" if msg["role"] == "user" else "model",
-                    "parts": [{"text": msg["content"]}]
-                })
-        
-        # Append latest prompt
-        formatted_contents.append({
-            "role": "user",
-            "parts": [{"text": f"{system_instruction}\n\nUser: {prompt}"}]
+    def _format_context(self, chat_context: List[Dict] | None) -> List[Dict]:
+        formatted: List[Dict] = []
+        for msg in (chat_context or [])[-12:]:
+            content = str(msg.get("content", "")).strip()
+            if not content:
+                continue
+            formatted.append({
+                "role": "model" if msg.get("role") in {"assistant", "model"} else "user",
+                "parts": [{"text": content}],
+            })
+        return formatted
+
+    def _parse_text_from_response(self, payload: Dict[str, Any]) -> str:
+        candidates = payload.get("candidates") or []
+        if not candidates:
+            raise AIProviderError(
+                "Gemini returned no candidates.",
+                provider_detail=json.dumps(payload)[:1000],
+            )
+
+        parts = candidates[0].get("content", {}).get("parts", [])
+        text = "".join(part.get("text", "") for part in parts if not part.get("thought")).strip()
+        if not text and parts:
+            text = "".join(part.get("text", "") for part in parts).strip()
+        if not text:
+            raise AIProviderError(
+                "Gemini returned an empty text response.",
+                provider_detail=json.dumps(payload)[:1000],
+            )
+        return text
+
+    def _validate_json_response(self, text: str) -> str:
+        clean = text.replace("```json", "").replace("```", "").strip()
+        try:
+            parsed = json.loads(clean)
+        except json.JSONDecodeError as exc:
+            raise AIProviderError(
+                "Gemini returned non-JSON content.",
+                provider_detail=f"{exc}: {clean[:1000]}",
+            ) from exc
+
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("message"), str):
+            raise AIProviderError(
+                "Gemini JSON response did not match the required schema.",
+                provider_detail=clean[:1000],
+            )
+        if not isinstance(parsed.get("movieSearchQueries", []), list):
+            raise AIProviderError(
+                "Gemini movieSearchQueries was not an array.",
+                provider_detail=clean[:1000],
+            )
+        if not isinstance(parsed.get("moodTags", []), list):
+            raise AIProviderError(
+                "Gemini moodTags was not an array.",
+                provider_detail=clean[:1000],
+            )
+        return json.dumps({
+            "message": parsed.get("message", "").strip(),
+            "movieSearchQueries": [str(title).strip() for title in parsed.get("movieSearchQueries", []) if str(title).strip()][:6],
+            "moodTags": [str(tag).strip() for tag in parsed.get("moodTags", []) if str(tag).strip()][:8],
         })
 
-        async with httpx.AsyncClient() as client:
-            try:
-                headers = {"Content-Type": "application/json"}
-                url = f"{self.base_url}?key={self.api_key}"
-                payload = {
-                    "contents": formatted_contents,
-                    "generationConfig": {
-                        "temperature": 0.8,
-                        "maxOutputTokens": 600,
-                    }
-                }
+    async def generate_chat_response(self, prompt: str, chat_context: List[Dict] | None = None) -> str:
+        self._assert_configured()
 
-                response = await client.post(url, headers=headers, json=payload, timeout=20.0)
-                if response.status_code == 200:
-                    result = response.json()
-                    candidates = result.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        non_thought_parts = [p.get("text", "") for p in parts if not p.get("thought")]
-                        text = "".join(non_thought_parts).strip()
-                        if not text and parts:
-                            text = parts[0].get("text", "").strip()
-                            
-                        # Clean markdown json formatting wrapper if generated
-                        if text.startswith("```json"):
-                            text = text[7:]
-                        if text.endswith("```"):
-                            text = text[:-3]
-                        return text.strip()
+        contents = self._format_context(chat_context)
+        contents.append({
+            "role": "user",
+            "parts": [{"text": f"{self._build_system_instruction()}\n\nUser prompt: {prompt}"}],
+        })
 
-                logger.error(f"Gemini API returned code {response.status_code}: {response.text}")
-                return self._generate_local_cinematic_fallback(prompt)
-            except Exception as e:
-                logger.error(f"Gemini API execution failed: {str(e)}")
-                return self._generate_local_cinematic_fallback(prompt)
+        payload = {
+            "contents": contents,
+            "generationConfig": {
+                "temperature": 0.75,
+                "maxOutputTokens": 2500,
+                "responseMimeType": "application/json",
+            },
+        }
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key,
+        }
 
-    def _generate_local_cinematic_fallback(self, prompt: str) -> str:
-        """Generates an ultra-premium local fallback response to ensure a flawless chatbot experience even without a working Gemini API key."""
-        prompt_lower = prompt.lower()
-        
-        # 1. Greetings / Conversational
-        if any(greet in prompt_lower for greet in ["hi", "hello", "hey", "greetings", "yo", "sup"]):
-            return json.dumps({
-                "message": "Hello! I am Cine AI, your premium cinematic companion. Tell me what kind of genre, director, or emotional mood you are in the mood for tonight, and let's find your next favorite film!",
-                "movieSearchQueries": [],
-                "moodTags": ["cinema", "companion"]
-            })
-            
-        # 2. Sci-Fi / Space / Future
-        elif any(keyword in prompt_lower for keyword in ["sci-fi", "scifi", "science", "space", "future", "interstellar", "inception", "matrix"]):
-            return json.dumps({
-                "message": "Ah, seeking a journey beyond the boundaries of reality. I highly recommend these mind-bending science fiction masterpieces that will challenge your perception of time, space, and consciousness.",
-                "movieSearchQueries": ["Interstellar", "Inception", "The Matrix"],
-                "moodTags": ["mind-bending", "sci-fi", "cinematic"]
-            })
-            
-        # 3. Thriller / Psychological / Mystery
-        elif any(keyword in prompt_lower for keyword in ["thriller", "psychological", "mystery", "twist", "suspense", "dark"]):
-            return json.dumps({
-                "message": "I completely understand that craving for suspense. Here are three chilling psychological thrillers that feature superb acting, dark atmospheres, and plot twists that will keep you guessing until the final frame.",
-                "movieSearchQueries": ["Shutter Island", "The Dark Knight", "Parasite"],
-                "moodTags": ["dark", "thrilling", "suspense"]
-            })
-            
-        # 4. Comedy / Feel-good / Uplifting
-        elif any(keyword in prompt_lower for keyword in ["comedy", "funny", "laugh", "feel-good", "uplifting", "happy"]):
-            return json.dumps({
-                "message": "Looking for something to lift your spirits? These exceptionally crafted comedies combine wit, brilliant cinematography, and heartwarming stories that are perfect for a relaxed evening.",
-                "movieSearchQueries": ["The Grand Budapest Hotel", "Barbie", "La La Land"],
-                "moodTags": ["uplifting", "whimsical", "feel-good"]
-            })
-            
-        # 5. Drama / Romance / Classic
-        elif any(keyword in prompt_lower for keyword in ["drama", "romance", "romantic", "sad", "tear", "emotional", "art"]):
-            return json.dumps({
-                "message": "To deeply feel the human condition through art, I recommend these stunning cinematic dramas. They explore love, obsession, and ambition with breathtaking visual styling and scores.",
-                "movieSearchQueries": ["Oppenheimer", "Whiplash", "La La Land"],
-                "moodTags": ["emotional", "poignant", "masterpiece"]
-            })
-            
-        # 6. Default Fallback
-        else:
-            return json.dumps({
-                "message": f"Based on the emotional and visual depth of your prompt, I highly recommend diving into these spectacular modern masterpieces that define premium cinema.",
-                "movieSearchQueries": ["Oppenheimer", "Dune: Part Two", "Interstellar"],
-                "moodTags": ["curated", "premium", "masterpiece"]
-            })
+        try:
+            async with httpx.AsyncClient(timeout=self.timeout_seconds) as client:
+                response = await client.post(self.provider_url, headers=headers, json=payload)
+        except httpx.TimeoutException as exc:
+            raise AIProviderError("Gemini request timed out.", provider_detail=str(exc)) from exc
+        except httpx.HTTPError as exc:
+            raise AIProviderError("Gemini request failed before receiving a response.", provider_detail=str(exc)) from exc
+
+        if response.status_code != 200:
+            detail = response.text[:2000]
+            logger.error("Gemini API returned %s: %s", response.status_code, detail)
+            raise AIProviderError(
+                "Gemini rejected the request.",
+                status_code=response.status_code,
+                provider_detail=detail,
+            )
+
+        text = self._parse_text_from_response(response.json())
+        return self._validate_json_response(text)
 
     async def generate_recommendations_list(self, mood_prompt: str) -> List[Dict]:
-        """Leverages Gemini to extract a strictly structured JSON list of movie suggestions mapping to mood prompts."""
-        if not self.api_key:
-            # Return dummy structure if api key is missing
-            return [
-                {"Title": "Inception", "imdbID": "tt1375666", "Year": "2010", "Poster": "https://images.unsplash.com/photo-1536440136628-849c177e76a1?q=80&w=300"},
-                {"Title": "Interstellar", "imdbID": "tt0816692", "Year": "2014", "Poster": "https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=300"}
-            ]
+        raw = await self.generate_chat_response(mood_prompt, [])
+        parsed = json.loads(raw)
+        return [{"Title": title} for title in parsed.get("movieSearchQueries", [])]
 
-        # Instruct model to generate structured JSON output containing IMDB IDs
-        instruction = (
-            "Based on the user's mood query, output exactly 4 highly recommended movies. "
-            "You MUST format your entire response as a raw JSON array of objects. "
-            "Do NOT wrap the response in markdown blocks or write any introductory text. "
-            "Each object MUST contain strictly: 'Title', 'imdbID' (must be a valid IMDb ID starting with tt), 'Year', and 'Poster' (leave Poster empty string or use unsplash placeholder). "
-            "Here is the mood query: "
-        )
-
-        async with httpx.AsyncClient() as client:
-            try:
-                headers = {"Content-Type": "application/json"}
-                url = f"{self.base_url}?key={self.api_key}"
-                payload = {
-                    "contents": [{
-                        "role": "user",
-                        "parts": [{"text": f"{instruction} '{mood_prompt}'"}]
-                    }],
-                    "generationConfig": {
-                        "temperature": 0.5,
-                        "maxOutputTokens": 800,
-                    }
-                }
-                response = await client.post(url, headers=headers, json=payload, timeout=20.0)
-                if response.status_code == 200:
-                    result = response.json()
-                    candidates = result.get("candidates", [])
-                    if candidates:
-                        parts = candidates[0].get("content", {}).get("parts", [])
-                        non_thought_parts = [p.get("text", "") for p in parts if not p.get("thought")]
-                        text = "".join(non_thought_parts).strip()
-                        if not text and parts:
-                            text = parts[0].get("text", "").strip()
-                            
-                        # Clean markdown json formatting wrapper if generated
-                        if text.startswith("```json"):
-                            text = text[7:]
-                        if text.endswith("```"):
-                            text = text[:-3]
-                        text = text.strip()
-
-                        
-                        movie_list = json.loads(text)
-                        if isinstance(movie_list, list):
-                            return movie_list
-                logger.error(f"Gemini API returned error for list generation: {response.text}")
-                return []
-            except Exception as e:
-                logger.error(f"Failed generating structured recommendation list: {str(e)}")
-                return []
 
 ai_service = AIService()
