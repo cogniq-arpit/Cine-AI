@@ -242,11 +242,13 @@ const imageIsFromTmdb = (url: string | null | undefined): boolean => {
 };
 
 const isQualityMovie = (movie: Movie): boolean => {
+  const hasPoster = typeof movie.poster_path === 'string' && movie.poster_path.length > 0;
+  const hasBackdrop = typeof movie.backdrop_path === 'string' && movie.backdrop_path.length > 0;
   return (
-    imageIsFromTmdb(movie.poster_path) &&
-    imageIsFromTmdb(movie.backdrop_path) &&
-    movie.vote_count >= 120 &&
-    movie.vote_average >= 6.2
+    hasPoster &&
+    hasBackdrop &&
+    movie.vote_count >= 5 &&
+    movie.vote_average >= 4.0
   );
 };
 
@@ -552,6 +554,7 @@ export const HomeScreen: React.FC = () => {
 
   const [refreshing, setRefreshing] = useState(false);
   const [bootLoading, setBootLoading] = useState(true);
+  const [isHeaderScrolled, setIsHeaderScrolled] = useState(false);
   const [heroMovies, setHeroMovies] = useState<Movie[]>([]);
   const [heroIndex, setHeroIndex] = useState(0);
   const [heroTrailerMap, setHeroTrailerMap] = useState<Record<number, TrailerInfo | null>>({});
@@ -1060,7 +1063,11 @@ export const HomeScreen: React.FC = () => {
     <View style={styles.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]}>
+      <View style={[
+        styles.topHeader, 
+        { paddingTop: insets.top + 8 },
+        isHeaderScrolled && styles.topHeaderSolid
+      ]}>
         <View>
           <Text style={styles.topGreeting} allowFontScaling={false}>{headerGreeting}</Text>
           <Text style={styles.topBrand} allowFontScaling={false}>CINE<Text style={styles.topBrandAi}>AI</Text></Text>
@@ -1092,6 +1099,11 @@ export const HomeScreen: React.FC = () => {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent.crimson} />}
+        onScroll={(event) => {
+          const offsetY = event.nativeEvent.contentOffset.y;
+          setIsHeaderScrolled(offsetY > 30);
+        }}
+        scrollEventThrottle={16}
       >
         <HeroBanner
           movie={activeHeroMovie}
@@ -1255,6 +1267,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: 'rgba(7,7,9,0.22)',
+  },
+  topHeaderSolid: {
+    backgroundColor: '#070709', // Solid dark color matching Colors.bg.void
+    borderBottomWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
   },
   topGreeting: {
     color: Colors.text.tertiary,
