@@ -24,8 +24,8 @@ class AIConfigurationError(AIProviderError):
 
 class AIService:
     def __init__(self):
-        self.api_key = settings.GEMINI_API_KEY
-        self.model = settings.GEMINI_MODEL
+        self.api_key = settings.GEMINI_API_KEY.strip() if settings.GEMINI_API_KEY else ""
+        self.model = settings.GEMINI_MODEL.strip() if settings.GEMINI_MODEL else ""
         self.base_url = settings.GEMINI_API_BASE_URL.rstrip("/")
         self.timeout_seconds = settings.GEMINI_TIMEOUT_SECONDS
 
