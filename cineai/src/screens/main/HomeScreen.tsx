@@ -81,6 +81,8 @@ interface PremiumRailDefinition {
     sort_by?: string;
     with_original_language?: string;
     primary_release_year?: number;
+    vote_average_gte?: number;
+    vote_count_gte?: number;
   };
 }
 
@@ -161,8 +163,13 @@ const PREMIUM_RAIL_DEFS: PremiumRailDefinition[] = [
     id: 'trending-india',
     title: 'Trending in India',
     subtitle: 'Regional momentum and crowd favorites',
-    mode: 'search',
-    searchQuery: 'India blockbuster trending movie',
+    mode: 'discover',
+    discoverParams: {
+      with_original_language: 'hi|te|ta|ml|kn',
+      sort_by: 'popularity.desc',
+      vote_average_gte: 5.4,
+      vote_count_gte: 30,
+    },
   },
   {
     id: 'hollywood-scifi',
@@ -175,8 +182,12 @@ const PREMIUM_RAIL_DEFS: PremiumRailDefinition[] = [
     id: 'award-winners',
     title: 'Award Winners',
     subtitle: 'Celebrated films from global awards circuits',
-    mode: 'search',
-    searchQuery: 'Oscar award winning movies',
+    mode: 'discover',
+    discoverParams: {
+      sort_by: 'vote_average.desc',
+      vote_average_gte: 7.1,
+      vote_count_gte: 180,
+    },
   },
   {
     id: 'hidden-gems',
@@ -203,15 +214,27 @@ const PREMIUM_RAIL_DEFS: PremiumRailDefinition[] = [
     id: 'bollywood-crime',
     title: 'Bollywood Crime',
     subtitle: 'High-stakes Hindi crime dramas and thrillers',
-    mode: 'search',
-    searchQuery: 'Bollywood crime thriller film',
+    mode: 'discover',
+    discoverParams: {
+      with_original_language: 'hi',
+      with_genres: '80|53',
+      sort_by: 'popularity.desc',
+      vote_average_gte: 5.8,
+      vote_count_gte: 35,
+    },
   },
   {
     id: 'south-indian-blockbusters',
     title: 'South Indian Blockbusters',
     subtitle: 'Event-level action and mass storytelling',
-    mode: 'search',
-    searchQuery: 'Telugu Tamil Malayalam action blockbuster',
+    mode: 'discover',
+    discoverParams: {
+      with_original_language: 'te|ta|ml|kn',
+      with_genres: '28|12',
+      sort_by: 'popularity.desc',
+      vote_average_gte: 5.6,
+      vote_count_gte: 40,
+    },
   },
   {
     id: 'psychological-thrillers',
@@ -347,6 +370,16 @@ const mergeByDiversity = (
     if (present.has(movie.id)) continue;
     merged.push(movie);
     present.add(movie.id);
+  }
+
+  // Safety net: if strict anti-duplicate filters starve a rail, allow top-ranked spillover.
+  if (merged.length < Math.min(desiredCount, 8)) {
+    for (const movie of ranked) {
+      if (merged.length >= desiredCount) break;
+      if (present.has(movie.id)) continue;
+      merged.push(movie);
+      present.add(movie.id);
+    }
   }
 
   merged.forEach(movie => globalUsed.add(movie.id));
@@ -488,7 +521,7 @@ const HeroBanner: React.FC<{
         source={{ uri: movie.backdrop_path || undefined }}
         style={styles.heroBackdrop}
         contentFit="cover"
-        transition={420}
+        transition={180}
         cachePolicy="memory-disk"
       />
 
@@ -570,6 +603,7 @@ export const HomeScreen: React.FC = () => {
   const [premiumRails, setPremiumRails] = useState<PremiumRailState[]>(
     PREMIUM_RAIL_DEFS.map(def => ({ ...def, movies: [], loading: true })),
   );
+  const heroAdvanceLockRef = useRef(false);
 
   const headerGreeting = useMemo(() => {
     const hour = new Date().getHours();
@@ -652,11 +686,15 @@ export const HomeScreen: React.FC = () => {
       }
 
       const discoverParams = args.discoverParams || {};
+      const discoverVoteAverageGte =
+        discoverParams.vote_average_gte !== undefined ? Number(discoverParams.vote_average_gte) : 6.2;
+      const discoverVoteCountGte =
+        discoverParams.vote_count_gte !== undefined ? Number(discoverParams.vote_count_gte) : 120;
       const { data } = await apiClient.get<RawMoviePayload[]>('/movies/discover', {
         params: {
           ...discoverParams,
-          vote_average_gte: 6.2,
-          vote_count_gte: 120,
+          vote_average_gte: discoverVoteAverageGte,
+          vote_count_gte: discoverVoteCountGte,
           limit,
         },
       });
@@ -676,11 +714,15 @@ export const HomeScreen: React.FC = () => {
         
         // discover mode
         const discoverParams = args.discoverParams || {};
+        const discoverVoteAverageGte =
+          discoverParams.vote_average_gte !== undefined ? Number(discoverParams.vote_average_gte) : 6.2;
+        const discoverVoteCountGte =
+          discoverParams.vote_count_gte !== undefined ? Number(discoverParams.vote_count_gte) : 120;
         const res = await tmdbApi.discover({
           with_genres: discoverParams.with_genres ? String(discoverParams.with_genres) : undefined,
           sort_by: discoverParams.sort_by ? String(discoverParams.sort_by) : undefined,
-          'vote_average.gte': discoverParams.vote_average_gte ? Number(discoverParams.vote_average_gte) : 6.2,
-          'vote_count.gte': discoverParams.vote_count_gte ? Number(discoverParams.vote_count_gte) : 120,
+          'vote_average.gte': discoverVoteAverageGte,
+          'vote_count.gte': discoverVoteCountGte,
           with_original_language: discoverParams.with_original_language ? String(discoverParams.with_original_language) : undefined,
           primary_release_year: discoverParams.primary_release_year ? Number(discoverParams.primary_release_year) : undefined,
           limit,
@@ -785,16 +827,54 @@ export const HomeScreen: React.FC = () => {
       return getOrFetchRail(`rail-${def.id}`, () => fetchRawMovies('search', { query: def.searchQuery, limit: 40 }));
     }
 
-    return getOrFetchRail(`rail-${def.id}`, () => fetchRawMovies('discover', {
-      discoverParams: {
+    return getOrFetchRail(`rail-${def.id}`, async () => {
+      const discoverParams = {
         with_genres: def.discoverParams?.with_genres,
         with_original_language: def.discoverParams?.with_original_language,
         sort_by: def.discoverParams?.sort_by || 'popularity.desc',
         primary_release_year: def.discoverParams?.primary_release_year,
-      },
-      limit: 40,
-    }));
+        vote_average_gte: def.discoverParams?.vote_average_gte,
+        vote_count_gte: def.discoverParams?.vote_count_gte,
+      };
+
+      const langFilter = String(discoverParams.with_original_language || '');
+      const hasLangUnion = langFilter.includes('|');
+
+      if (hasLangUnion) {
+        const languages = langFilter.split('|').map(l => l.trim()).filter(Boolean);
+        const perLanguageLimit = Math.max(14, Math.ceil(64 / Math.max(languages.length, 1)));
+        const batches = await Promise.all(
+          languages.map(with_original_language =>
+            fetchRawMovies('discover', {
+              discoverParams: { ...discoverParams, with_original_language },
+              limit: perLanguageLimit,
+            }),
+          ),
+        );
+
+        const merged = rankMovies(sanitizeMovieList(batches.flat()));
+        if (merged.length >= 10) {
+          return merged;
+        }
+      }
+
+      return fetchRawMovies('discover', {
+        discoverParams,
+        limit: 40,
+      });
+    });
   }, [fetchRawMovies, getOrFetchRail]);
+
+  const prefetchHeroAssets = useCallback(async (movie: Movie | null | undefined) => {
+    if (!movie) return;
+    const queue: Promise<boolean>[] = [];
+    const posterUrl = movie.poster_path;
+    const backdropUrl = movie.backdrop_path;
+    if (typeof posterUrl === 'string' && imageIsFromTmdb(posterUrl)) queue.push(Image.prefetch(posterUrl));
+    if (typeof backdropUrl === 'string' && imageIsFromTmdb(backdropUrl)) queue.push(Image.prefetch(backdropUrl));
+    if (queue.length === 0) return;
+    await Promise.allSettled(queue);
+  }, []);
 
   const resolveTrailer = useCallback(async (movie: Movie): Promise<TrailerInfo | null> => {
     const cached = TRAILER_CACHE.get(movie.id);
@@ -887,9 +967,8 @@ export const HomeScreen: React.FC = () => {
       if (isMountedRef.current) {
         setHeroMovies(hero);
         setHeroIndex(0);
-        hero.slice(0, 2).forEach(movie => {
-          if (movie.poster_path) Image.prefetch(movie.poster_path);
-          if (movie.backdrop_path) Image.prefetch(movie.backdrop_path);
+        hero.slice(0, 3).forEach(movie => {
+          prefetchHeroAssets(movie).catch(() => {});
         });
       }
     } catch (e) {
@@ -975,7 +1054,22 @@ export const HomeScreen: React.FC = () => {
     if (isMountedRef.current) {
       setBootLoading(false);
     }
-  }, [fetchAiRecommendations, fetchHeroMovies, fetchMoodRail, fetchPremiumRailRaw, readContinueWatching, selectedMoodId]);
+  }, [fetchAiRecommendations, fetchHeroMovies, fetchMoodRail, fetchPremiumRailRaw, prefetchHeroAssets, readContinueWatching, selectedMoodId]);
+
+  const advanceHero = useCallback(async () => {
+    if (heroMovies.length <= 1 || heroAdvanceLockRef.current) return;
+    heroAdvanceLockRef.current = true;
+    try {
+      const nextIndex = (heroIndex + 1) % heroMovies.length;
+      const nextMovie = heroMovies[nextIndex];
+      await prefetchHeroAssets(nextMovie);
+      if (isMountedRef.current) {
+        setHeroIndex(nextIndex);
+      }
+    } finally {
+      heroAdvanceLockRef.current = false;
+    }
+  }, [heroIndex, heroMovies, prefetchHeroAssets]);
 
   const refreshMoodRail = useCallback(async (mood: MoodDefinition) => {
     if (moodRailById[mood.id]?.length) {
@@ -1037,11 +1131,11 @@ export const HomeScreen: React.FC = () => {
     if (heroMovies.length <= 1) return;
 
     const interval = setInterval(() => {
-      setHeroIndex(current => (current + 1) % heroMovies.length);
+      advanceHero().catch(() => {});
     }, 7000);
 
     return () => clearInterval(interval);
-  }, [heroMovies]);
+  }, [advanceHero, heroMovies.length]);
 
   useEffect(() => {
     if (!activeHeroMovie) return;
@@ -1049,7 +1143,10 @@ export const HomeScreen: React.FC = () => {
     warmHeroTrailer(activeHeroMovie).catch(() => {});
     const nextMovie = heroMovies[(heroIndex + 1) % Math.max(heroMovies.length, 1)];
     warmHeroTrailer(nextMovie).catch(() => {});
-  }, [activeHeroMovie, heroIndex, heroMovies, warmHeroTrailer]);
+    prefetchHeroAssets(nextMovie).catch(() => {});
+    const afterNextMovie = heroMovies[(heroIndex + 2) % Math.max(heroMovies.length, 1)];
+    prefetchHeroAssets(afterNextMovie).catch(() => {});
+  }, [activeHeroMovie, heroIndex, heroMovies, prefetchHeroAssets, warmHeroTrailer]);
 
   const openHeroTrailer = useCallback(() => {
     if (!activeHeroTrailer) return;
@@ -1374,6 +1471,8 @@ const styles = StyleSheet.create({
   heroActions: {
     flexDirection: 'row',
     alignItems: 'center',
+    flexWrap: 'wrap',
+    width: '100%',
     gap: 10,
   },
   heroPrimaryBtn: {
@@ -1385,6 +1484,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     gap: 6,
     backgroundColor: '#D9ECFA',
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 150,
   },
   heroPrimaryBtnText: {
     color: '#071018',
@@ -1410,6 +1512,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
+    flexGrow: 1,
+    flexShrink: 1,
+    minWidth: 108,
   },
   heroSecondaryBtnText: {
     color: Colors.text.primary,

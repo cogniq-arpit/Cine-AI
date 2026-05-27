@@ -77,7 +77,9 @@ class MovieMetadataService:
             "vote_count": movie.get("vote_count") or 1000,
             "genre_ids": movie.get("genre_ids") or ([g["id"] for g in genres] if genres else []),
             "release_date": release_date or "2000-01-01",
-            "videos": movie.get("videos") or {"results": []}
+            "videos": movie.get("videos") or {"results": []},
+            "similar": movie.get("similar") or {"results": []},
+            "recommendations": movie.get("recommendations") or {"results": []},
         }
 
     async def fetch_by_imdb_id(self, imdb_id: str) -> Optional[Dict]:
@@ -104,7 +106,7 @@ class MovieMetadataService:
                 
                 # 2. Fetch full details including credits
                 detail_url = f"{self.base_url}movie/{tmdb_id}"
-                detail_params = {**base_params, "append_to_response": "credits,videos"}
+                detail_params = {**base_params, "append_to_response": "credits,videos,similar,recommendations"}
                 detail_resp = await client.get(detail_url, headers=headers, params=detail_params, timeout=10.0)
                 if detail_resp.status_code != 200:
                     logger.error(f"TMDB details fetch returned status {detail_resp.status_code} for TMDB ID {tmdb_id}: {detail_resp.text}")
@@ -319,4 +321,3 @@ class MovieMetadataService:
                 return []
 
 movie_metadata_service = MovieMetadataService()
-

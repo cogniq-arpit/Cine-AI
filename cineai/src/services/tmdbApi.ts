@@ -752,9 +752,9 @@ export const mapTmdbToMovie = (movieData: any): Movie => {
 
   return {
     id,
-    title: movieData.Title || '',
-    original_title: movieData.Title || '',
-    overview: movieData.Plot || 'No plot overview available.',
+    title: movieData.Title || movieData.title || movieData.original_title || '',
+    original_title: movieData.original_title || movieData.Title || movieData.title || '',
+    overview: movieData.Plot || movieData.overview || 'No plot overview available.',
     poster_path: poster,
     backdrop_path: backdrop,
     release_date: releaseDate,
@@ -775,44 +775,74 @@ export const mapTmdbToMovieDetails = (movieData: any): MovieDetails => {
   const revenueVal = movieData.revenue || parseInt((movieData.BoxOffice || '$0').replace(/[^0-9]/g, ''), 10) || 0;
 
   // Split actors
-  const castList: CastMember[] = (movieData.Actors || 'N/A')
-    .split(',')
-    .map((nameStr: string, idx: number) => {
-      const name = nameStr.trim();
-      return {
-        id: idx + 1000,
-        name,
-        character: 'Self',
-        profile_path: null,
-        order: idx,
-        known_for_department: 'Acting',
-      };
-    });
+  const castList: CastMember[] = Array.isArray(movieData?.credits?.cast) && movieData.credits.cast.length > 0
+    ? movieData.credits.cast.slice(0, 20).map((item: any, idx: number) => ({
+      id: Number(item?.id || idx + 1000),
+      name: String(item?.name || 'Unknown'),
+      character: String(item?.character || 'Self'),
+      profile_path: item?.profile_path || null,
+      order: Number(item?.order ?? idx),
+      known_for_department: String(item?.known_for_department || 'Acting'),
+    }))
+    : (movieData.Actors || 'N/A')
+      .split(',')
+      .map((nameStr: string, idx: number) => {
+        const name = nameStr.trim();
+        return {
+          id: idx + 1000,
+          name,
+          character: 'Self',
+          profile_path: null,
+          order: idx,
+          known_for_department: 'Acting',
+        };
+      });
 
   // Split director & writers
-  const crewList: CrewMember[] = [];
-  if (movieData.Director && movieData.Director !== 'N/A') {
-    crewList.push({
-      id: 2000,
-      name: movieData.Director.trim(),
-      job: 'Director',
-      department: 'Directing',
-      profile_path: null,
-      known_for_department: 'Directing',
-    });
-  }
-  if (movieData.Writer && movieData.Writer !== 'N/A') {
-    movieData.Writer.split(',').forEach((w: string, idx: number) => {
-      crewList.push({
-        id: 3000 + idx,
-        name: w.trim(),
-        job: 'Writer',
-        department: 'Writing',
-        profile_path: null,
-        known_for_department: 'Writing',
-      });
-    });
-  }
+  const crewList: CrewMember[] = Array.isArray(movieData?.credits?.crew) && movieData.credits.crew.length > 0
+    ? movieData.credits.crew.map((item: any, idx: number) => ({
+      id: Number(item?.id || idx + 2000),
+      name: String(item?.name || 'Unknown'),
+      job: String(item?.job || 'Crew'),
+      department: String(item?.department || 'Production'),
+      profile_path: item?.profile_path || null,
+      known_for_department: String(item?.known_for_department || item?.department || 'Production'),
+    }))
+    : (() => {
+      const built: CrewMember[] = [];
+      if (movieData.Director && movieData.Director !== 'N/A') {
+        built.push({
+          id: 2000,
+          name: movieData.Director.trim(),
+          job: 'Director',
+          department: 'Directing',
+          profile_path: null,
+          known_for_department: 'Directing',
+        });
+      }
+      if (movieData.Writer && movieData.Writer !== 'N/A') {
+        movieData.Writer.split(',').forEach((w: string, idx: number) => {
+          built.push({
+            id: 3000 + idx,
+            name: w.trim(),
+            job: 'Writer',
+            department: 'Writing',
+            profile_path: null,
+            known_for_department: 'Writing',
+          });
+        });
+      }
+      return built;
+    })();
+
+  const mapListPayloadToMovies = (payload: any): Movie[] => {
+    const results = payload?.results;
+    if (!Array.isArray(results)) return [];
+    return results.map(mapTmdbToMovie);
+  };
+
+  const mappedSimilar = mapListPayloadToMovies(movieData?.similar);
+  const mappedRecommendations = mapListPayloadToMovies(movieData?.recommendations);
 
   const details: MovieDetails = {
     ...movie,
@@ -853,24 +883,302 @@ export const mapTmdbToMovieDetails = (movieData: any): MovieDetails => {
     'watch/providers': {
       results: {},
     },
-  };
-
-  // Attach local recommendation lists utilizing our scoring algorithm
-  details.similar = {
-    page: 1,
-    results: getLocalRecommendations(details, 8),
-    total_pages: 1,
-    total_results: 8,
-  };
-
-  details.recommendations = {
-    page: 1,
-    results: getLocalRecommendations(details, 8),
-    total_pages: 1,
-    total_results: 8,
+    similar: {
+      page: 1,
+      results: mappedSimilar,
+      total_pages: 1,
+      total_results: mappedSimilar.length,
+    },
+    recommendations: {
+      page: 1,
+      results: mappedRecommendations,
+      total_pages: 1,
+      total_results: mappedRecommendations.length,
+    },
   };
 
   return details;
+};
+
+const RECOMMENDATION_LOOP_TOKENS = [
+  'dune',
+  'interstellar',
+  'dark knight',
+  'avengers',
+  'oppenheimer',
+  'inception',
+];
+
+const FRANCHISE_STOPWORDS = new Set([
+  'the', 'and', 'of', 'a', 'an', 'part', 'chapter', 'volume', 'vol', 'episode',
+  'movie', 'film', 'story', 'rise', 'return', 'returns', 'chronicles',
+]);
+
+const safeYearFromDate = (date?: string): number | null => {
+  if (!date || date.length < 4) return null;
+  const year = parseInt(date.slice(0, 4), 10);
+  return Number.isFinite(year) ? year : null;
+};
+
+const normalizeTitle = (title: string): string => {
+  return String(title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const getFranchiseKey = (title: string): string => {
+  const normalized = normalizeTitle(title)
+    .replace(/\b(part|chapter|volume|vol|episode)\b.*$/, '')
+    .trim();
+  if (!normalized) return '';
+  const tokens = normalized
+    .split(' ')
+    .filter(token => token.length > 2 && !FRANCHISE_STOPWORDS.has(token));
+  if (tokens.length === 0) return normalized;
+  return tokens.slice(0, 2).join(' ');
+};
+
+const dedupeMovies = (movies: Movie[]): Movie[] => {
+  const map = new Map<number, Movie>();
+  for (const movie of movies) {
+    if (!movie || !movie.id) continue;
+    if (!map.has(movie.id)) map.set(movie.id, movie);
+  }
+  return Array.from(map.values());
+};
+
+const isHiddenGemCandidate = (movie: Movie): boolean => {
+  return movie.vote_average >= 7.0 && movie.vote_count >= 40 && movie.vote_count <= 5500;
+};
+
+const scoreRecommendationCandidate = (target: MovieDetails, candidate: Movie): number => {
+  const targetGenres = new Set(target.genre_ids || []);
+  const targetLang = target.original_language || 'en';
+  const targetYear = safeYearFromDate(target.release_date);
+  const candidateYear = safeYearFromDate(candidate.release_date);
+
+  let score =
+    candidate.vote_average * 1.9 +
+    Math.log10(Math.max(candidate.vote_count, 1)) * 1.25 +
+    Math.min(candidate.popularity || 0, 1200) * 0.018;
+
+  const genreOverlap = (candidate.genre_ids || []).filter(id => targetGenres.has(id)).length;
+  score += genreOverlap * 2.4;
+
+  if (candidate.original_language === targetLang) {
+    score += 0.85;
+  }
+
+  if (targetYear && candidateYear) {
+    const delta = Math.abs(candidateYear - targetYear);
+    if (delta <= 3) score += 0.9;
+    if (delta >= 18) score += 0.75;
+  }
+
+  if (candidate.vote_count > 90000) {
+    score -= 1.7;
+  }
+
+  if (isHiddenGemCandidate(candidate)) {
+    score += 1.45;
+  }
+
+  const normalizedTitle = normalizeTitle(candidate.title);
+  if (RECOMMENDATION_LOOP_TOKENS.some(token => normalizedTitle.includes(token))) {
+    score -= 2.6;
+  }
+
+  return score;
+};
+
+const buildDiverseRecommendationList = (
+  target: MovieDetails,
+  pool: Movie[],
+  count = 12,
+): Movie[] => {
+  type Candidate = {
+    movie: Movie;
+    score: number;
+    franchiseKey: string;
+    hiddenGem: boolean;
+    primaryGenre: number;
+  };
+
+  const scored: Candidate[] = dedupeMovies(pool)
+    .filter(movie => movie.id !== target.id)
+    .map(movie => ({
+      movie,
+      score: scoreRecommendationCandidate(target, movie),
+      franchiseKey: getFranchiseKey(movie.title),
+      hiddenGem: isHiddenGemCandidate(movie),
+      primaryGenre: movie.genre_ids?.[0] ?? -1,
+    }))
+    .sort((a, b) => b.score - a.score);
+
+  const picks: Movie[] = [];
+  const pickedIds = new Set<number>();
+  const usedFranchiseKeys = new Set<string>();
+  const genreUsage = new Map<number, number>();
+
+  const commit = (candidate: Candidate): void => {
+    picks.push(candidate.movie);
+    pickedIds.add(candidate.movie.id);
+    if (candidate.franchiseKey) usedFranchiseKeys.add(candidate.franchiseKey);
+    const currentGenreCount = genreUsage.get(candidate.primaryGenre) || 0;
+    genreUsage.set(candidate.primaryGenre, currentGenreCount + 1);
+  };
+
+  const canUseFranchise = (candidate: Candidate): boolean => {
+    return !candidate.franchiseKey || !usedFranchiseKeys.has(candidate.franchiseKey);
+  };
+
+  for (let slot = 0; slot < count; slot += 1) {
+    let chosen: Candidate | undefined;
+
+    if (slot % 4 === 3) {
+      chosen = scored.find(candidate =>
+        !pickedIds.has(candidate.movie.id) &&
+        candidate.hiddenGem &&
+        canUseFranchise(candidate),
+      );
+    }
+
+    if (!chosen) {
+      chosen = scored.find(candidate =>
+        !pickedIds.has(candidate.movie.id) &&
+        canUseFranchise(candidate) &&
+        (genreUsage.get(candidate.primaryGenre) || 0) < 2,
+      );
+    }
+
+    if (!chosen) {
+      chosen = scored.find(candidate =>
+        !pickedIds.has(candidate.movie.id) &&
+        canUseFranchise(candidate),
+      );
+    }
+
+    if (!chosen) {
+      chosen = scored.find(candidate => !pickedIds.has(candidate.movie.id));
+    }
+
+    if (!chosen) break;
+    commit(chosen);
+  }
+
+  return picks.slice(0, count);
+};
+
+const fetchRecommendationSourcePool = async (target: MovieDetails): Promise<Movie[]> => {
+  const targetGenres = (target.genre_ids || []).slice(0, 3);
+  const genreFilter = targetGenres.length > 0 ? targetGenres.join('|') : '18|53|80';
+  const primaryLanguage = target.original_language || 'en';
+  const targetYear = safeYearFromDate(target.release_date);
+
+  const requests: Array<Promise<{ data: any[] }>> = [
+    apiClient.get<any[]>('/movies/discover', {
+      params: {
+        with_genres: genreFilter,
+        sort_by: 'popularity.desc',
+        vote_average_gte: 6.2,
+        vote_count_gte: 120,
+        limit: 32,
+      },
+    }),
+    apiClient.get<any[]>('/movies/discover', {
+      params: {
+        with_genres: genreFilter,
+        sort_by: 'vote_average.desc',
+        vote_average_gte: 7.0,
+        vote_count_gte: 55,
+        limit: 32,
+      },
+    }),
+    apiClient.get<any[]>('/movies/discover', {
+      params: {
+        with_genres: genreFilter,
+        with_original_language: primaryLanguage,
+        sort_by: 'popularity.desc',
+        vote_average_gte: 5.8,
+        vote_count_gte: 30,
+        limit: 24,
+      },
+    }),
+    apiClient.get<any[]>('/movies/trending', {
+      params: { limit: 24 },
+    }),
+  ];
+
+  if (targetYear) {
+    requests.push(
+      apiClient.get<any[]>('/movies/discover', {
+        params: {
+          with_genres: genreFilter,
+          primary_release_year: Math.max(targetYear - 1, 1970),
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.7,
+          vote_count_gte: 35,
+          limit: 18,
+        },
+      }),
+    );
+  }
+
+  const leadGenre = target.genres?.[0]?.name;
+  if (leadGenre) {
+    requests.push(
+      apiClient.get<any[]>('/movies/search', {
+        params: {
+          query: `${leadGenre} cinema`,
+          limit: 12,
+        },
+      }),
+    );
+  }
+
+  const settled = await Promise.allSettled(requests);
+  const pool: Movie[] = [];
+
+  for (const response of settled) {
+    if (response.status !== 'fulfilled') continue;
+    const rows = response.value?.data;
+    if (!Array.isArray(rows)) continue;
+    rows.forEach(item => {
+      try {
+        pool.push(mapTmdbToMovie(item));
+      } catch {
+        // ignore malformed records
+      }
+    });
+  }
+
+  return dedupeMovies(pool).filter(movie => movie.id !== target.id);
+};
+
+const hydrateDiverseRecommendations = async (details: MovieDetails): Promise<MovieDetails> => {
+  const seededPool = dedupeMovies([
+    ...(details.similar?.results || []),
+    ...(details.recommendations?.results || []),
+  ]);
+
+  let dynamicPool: Movie[] = [];
+  try {
+    dynamicPool = await fetchRecommendationSourcePool(details);
+  } catch {
+    dynamicPool = [];
+  }
+
+  const mergedPool = dedupeMovies([...seededPool, ...dynamicPool]).filter(movie => movie.id !== details.id);
+  const fallbackPool = mergedPool.length > 0 ? mergedPool : getLocalRecommendations(details, 18);
+  const curated = buildDiverseRecommendationList(details, fallbackPool, 12);
+
+  return {
+    ...details,
+    similar: createPaginatedResponse(curated),
+    recommendations: createPaginatedResponse(curated),
+  };
 };
 
 const createPaginatedResponse = <T>(results: T[]): PaginatedResponse<T> => ({
@@ -952,32 +1260,30 @@ export const tmdbApi = {
   // Movie Details Lookup by Number ID
   getMovieDetails: async (id: number): Promise<MovieDetails> => {
     const imdbId = numberToImdbId(id);
-    
-    // Check curated database first
-    const curated = CURATED_DB.find(m => m.imdbID === imdbId);
-    if (curated) {
-      return mapTmdbToMovieDetails(curated);
-    }
+    let details: MovieDetails;
 
     try {
       const { data } = await apiClient.get<any>(`/movies/details/${imdbId}`);
-      return mapTmdbToMovieDetails(data);
+      details = mapTmdbToMovieDetails(data);
     } catch (error) {
       console.log(`Backend details lookup failed for ${imdbId}. Serving custom fallback.`, error);
-      const fallbackCurated = CURATED_DB[0];
-      return mapTmdbToMovieDetails({
+      const fallbackCurated = CURATED_DB.find(m => m.imdbID === imdbId) || CURATED_DB[0];
+      details = mapTmdbToMovieDetails({
         ...fallbackCurated,
-        imdbID: imdbId,
-        Title: `Movie Ref #${id}`,
+        imdbID: fallbackCurated.imdbID || imdbId,
+        Title: fallbackCurated.Title || `Movie Ref #${id}`,
       });
     }
+
+    return hydrateDiverseRecommendations(details);
   },
 
   // Movie Details Lookup by IMDb ID String directly
   getMovieDetailsByImdbId: async (imdbId: string): Promise<MovieDetails> => {
     try {
       const { data } = await apiClient.get<any>(`/movies/details/${imdbId}`);
-      return mapTmdbToMovieDetails(data);
+      const details = mapTmdbToMovieDetails(data);
+      return hydrateDiverseRecommendations(details);
     } catch (error) {
       const id = imdbIdToNumber(imdbId);
       return tmdbApi.getMovieDetails(id);
@@ -1046,8 +1352,16 @@ export const tmdbApi = {
     let list = CURATED_DB;
 
     if (params.with_genres) {
-      const genreId = parseInt(params.with_genres, 10);
-      list = list.filter(m => getGenreIdsFromString(m.Genre).includes(genreId));
+      const genreIds = params.with_genres
+        .split(/[|,]/)
+        .map(value => parseInt(value.trim(), 10))
+        .filter(value => Number.isFinite(value));
+      if (genreIds.length > 0) {
+        list = list.filter(m => {
+          const ids = getGenreIdsFromString(m.Genre);
+          return genreIds.some(id => ids.includes(id));
+        });
+      }
     }
 
     if (params.year) {
