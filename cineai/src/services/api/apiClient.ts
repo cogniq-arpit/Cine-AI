@@ -20,7 +20,7 @@ console.log('--- [DEBUG] Cine AI Frontend API Base URL:', API_URL);
 
 export const apiClient = axios.create({
   baseURL: API_URL,
-  timeout: 15000,
+  timeout: 45000,
   headers: {
     'Content-Type': 'application/json',
   },

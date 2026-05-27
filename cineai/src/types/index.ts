@@ -268,7 +268,7 @@ export type AuthStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Search: undefined;
+  Search: { query?: string } | undefined;
   AIChat: undefined;
   Watchlist: undefined;
   Profile: undefined;

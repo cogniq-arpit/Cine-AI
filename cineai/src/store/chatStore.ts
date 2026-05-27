@@ -46,7 +46,7 @@ const extractAndFetchMovies = async (text: string): Promise<Movie[]> => {
       }
     }
   } catch (err) {
-    console.warn('Failed to extract/fetch movies from backend text:', err);
+    console.log('Failed to extract/fetch movies from backend text:', err);
   }
   return movies;
 };
@@ -161,7 +161,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           };
         }
       } catch (err) {
-        console.warn('Failed to parse backend content as structured JSON, falling back to regex...', err);
+        console.log('Failed to parse backend content as structured JSON, falling back to regex...', err);
       }
       
       // Fallback: use raw text and regex

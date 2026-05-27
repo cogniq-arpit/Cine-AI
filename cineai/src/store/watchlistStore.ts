@@ -60,7 +60,7 @@ export const useWatchlistStore = create<WatchlistState>((set, get) => ({
           await AsyncStorage.setItem(WATCHLIST_KEY, JSON.stringify(items));
           return;
         } catch (backendError) {
-          console.warn('Failed to load watchlist from backend, falling back to local storage:', backendError);
+          console.log('Failed to load watchlist from backend, falling back to local storage:', backendError);
         }
       }
 

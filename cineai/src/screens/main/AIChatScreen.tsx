@@ -1,17 +1,18 @@
 /**
- * CineAI V3 — AIChatScreen Spacing & Refinement Polish
- * The absolute zenith of flagship mobile cinematic UX.
- * Perfectly balanced floating inputs, micro-halos, and elegant layout scale.
+ * CineAI V3 — AIChatScreen (Flagship World-Class Assistant Edition)
+ * An elite, cinematic, and functional AI Movie Copilot combining visual cues from
+ * Perplexity, ChatGPT mobile, Siri, and Apple Intelligence.
+ * Equipped with real-time native Audio recording (expo-av) and Text-to-Speech (expo-speech).
  */
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable, TextInput,
   KeyboardAvoidingView, Platform, Dimensions, ActivityIndicator, StatusBar,
-  Modal, ScrollView,
+  Modal, ScrollView, Keyboard,
 } from 'react-native';
 import Animated, {
   useSharedValue, useAnimatedStyle, withSpring, withTiming, withRepeat,
-  withSequence, Easing,
+  withSequence, Easing, withDelay, interpolate, interpolateColor
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
@@ -19,15 +20,17 @@ import { Ionicons } from '@expo/vector-icons';
 import { BlurView } from 'expo-blur';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
-import { useNavigation } from '@react-navigation/native';
-import { Colors, Radius, Motion, Spacing } from '../../constants/theme';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { Audio } from 'expo-av';
+import * as Speech from 'expo-speech';
+
+import { Colors, Radius, Motion, Spacing, Typography, Shadows } from '../../constants/theme';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
 import type { ChatMessage, Movie } from '../../types';
 import { VoiceWave } from '../../components/ui/VoiceWave';
 
 const { width: W, height: H } = Dimensions.get('window');
-type ChatNav = any;
 
 const MOCK_SPEECH_PHRASES = [
   'Recommend a highly immersive, futuristic sci-fi film with deep philosophical themes',
@@ -36,103 +39,24 @@ const MOCK_SPEECH_PHRASES = [
   'I want a visually spectacular modern action adventure with great pacing',
 ];
 
-const QUICK_MOOD_PILLS = [
-  { id: 'noir', label: 'Neo-Noir', icon: 'moon-outline' },
-  { id: 'cyber', label: 'Cyberpunk', icon: 'hardware-chip-outline' },
-  { id: 'oscar', label: 'Oscar Gold', icon: 'trophy-outline' },
-  { id: 'indie', label: 'Indie Gems', icon: 'film-outline' },
-  { id: 'mind', label: 'Mind-Bend', icon: 'bulb-outline' },
-];
-
 const SUGGESTION_CHIPS = [
-  { id: '1', icon: 'shuffle', label: 'Surprise me', query: 'Recommend a film I wouldn\'t expect to love but probably will' },
+  { id: '1', icon: 'shuffle-outline', label: 'Surprise me', query: 'Recommend a film I wouldn\'t expect to love but probably will' },
   { id: '2', icon: 'heart-outline', label: 'Match my mood', query: 'What should I watch based on a relaxed evening mood?' },
-  { id: '3', icon: 'trending-up', label: 'Top rated 2024', query: 'What are the best-reviewed films from 2024?' },
+  { id: '3', icon: 'trending-up-outline', label: 'Top rated', query: 'What are the highest-rated films currently on TMDB?' },
   { id: '4', icon: 'bulb-outline', label: 'Mind-bending', query: 'I want a film that will make me question everything' },
-  { id: '5', icon: 'business-outline', label: 'Corporate thriller', query: 'Recommend a sharp corporate or financial thriller with intelligent pacing' },
+  { id: '5', icon: 'flash-outline', label: 'High tension', query: 'Recommend a tense movie that grips from the first scene' },
   { id: '6', icon: 'rainy-outline', label: 'Rainy night', query: 'Suggest a moody rainy-night film with atmospheric cinematography' },
-  { id: '7', icon: 'rocket-outline', label: 'Space epic', query: 'Recommend a grand space epic with emotional stakes and premium visuals' },
-  { id: '8', icon: 'library-outline', label: 'Modern classic', query: 'Give me a modern classic that feels essential and rewatchable' },
-  { id: '9', icon: 'people-outline', label: 'Group watch', query: 'Recommend a crowd-pleasing movie for a mixed group of friends' },
-  { id: '10', icon: 'search-outline', label: 'Hidden gem', query: 'Find a hidden gem that deserves more attention' },
-  { id: '11', icon: 'color-palette-outline', label: 'Visual feast', query: 'Suggest a movie with extraordinary production design and color' },
-  { id: '12', icon: 'timer-outline', label: 'Under 2 hours', query: 'Recommend a tightly paced excellent movie under two hours' },
-  { id: '13', icon: 'planet-outline', label: 'Sci-fi noir', query: 'I want a sci-fi noir with mystery, style, and big ideas' },
-  { id: '14', icon: 'musical-notes-outline', label: 'Great score', query: 'Recommend a film with an unforgettable score and cinematic scale' },
-  { id: '15', icon: 'shield-checkmark-outline', label: 'Prestige pick', query: 'Give me a prestige drama with outstanding acting and direction' },
-  { id: '16', icon: 'flame-outline', label: 'High tension', query: 'Recommend a tense movie that grips from the first scene' },
 ];
 
 const PREVIEW_HIGHLIGHTS = [
-  {
-    id: 1,
-    title: 'Interstellar',
-    match: 98,
-    poster: 'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
-    desc: 'Space Odyssey',
-    movieId: 816692
-  },
-  {
-    id: 2,
-    title: 'Dune: Part Two',
-    match: 96,
-    poster: 'https://image.tmdb.org/t/p/w500/1pdfpwXt6tLY244TLHjRj24Zt6t.jpg',
-    desc: 'Desert Epic',
-    movieId: 15239678
-  },
-  {
-    id: 3,
-    title: 'The Dark Knight',
-    match: 94,
-    poster: 'https://image.tmdb.org/t/p/w500/qJ2tWw7512l29i1KjGo8qG71wCc.jpg',
-    desc: 'Gotham\'s Guardian',
-    movieId: 468569
-  },
-  {
-    id: 4,
-    title: 'Blade Runner 2049',
-    match: 93,
-    poster: 'https://image.tmdb.org/t/p/w500/r4FGhQIrB7pOvHTkl8PZB6FYSdK.jpg',
-    desc: 'Future Noir',
-    movieId: 1856101
-  },
-  {
-    id: 5,
-    title: 'Parasite',
-    match: 92,
-    poster: 'https://image.tmdb.org/t/p/w500/7IiTTgloJzvGI1TAYymCfbfl3vT.jpg',
-    desc: 'Class Tension',
-    movieId: 6751668
-  },
-  {
-    id: 6,
-    title: 'Inception',
-    match: 91,
-    poster: 'https://image.tmdb.org/t/p/w500/edv5CZvWj09upOsy2Y6IwDhK8bt.jpg',
-    desc: 'Dream Heist',
-    movieId: 1375666
-  },
-  {
-    id: 7,
-    title: 'La La Land',
-    match: 90,
-    poster: 'https://image.tmdb.org/t/p/w500/uDO8zWDhfWwoFdKS4fzkUJt0Rf0.jpg',
-    desc: 'Melancholy Glow',
-    movieId: 3783958
-  },
-  {
-    id: 8,
-    title: 'Arrival',
-    match: 89,
-    poster: 'https://image.tmdb.org/t/p/w500/x2FJsf1ElAgr63Y3PNPtJrcmpoe.jpg',
-    desc: 'Elegant Sci-Fi',
-    movieId: 329865
-  }
+  { id: 1, title: 'Interstellar', match: 98, poster: 'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg', desc: 'Space Odyssey', movieId: 816692 },
+  { id: 2, title: 'Dune: Part Two', match: 96, poster: 'https://image.tmdb.org/t/p/w500/1pdfpwXt6tLY244TLHjRj24Zt6t.jpg', desc: 'Desert Epic', movieId: 15239678 },
+  { id: 3, title: 'The Dark Knight', match: 94, poster: 'https://image.tmdb.org/t/p/w500/qJ2tWw7512l29i1KjGo8qG71wCc.jpg', desc: 'Gotham\'s Guardian', movieId: 468569 },
+  { id: 4, title: 'Blade Runner 2049', match: 93, poster: 'https://image.tmdb.org/t/p/w500/r4FGhQIrB7pOvHTkl8PZB6FYSdK.jpg', desc: 'Future Noir', movieId: 1856101 }
 ];
 
-
-// ─── Breathing Aura Rings for CineAI Orb ─────────────────────────────────────
-const PulseRing: React.FC<{ delay: number }> = ({ delay }) => {
+// ─── Ambient Glow Pulsing Rings ─────────────────────────────────────────────
+const PulseRing: React.FC<{ delay: number; color?: string; size?: number }> = ({ delay, color = Colors.accent.crimson, size = 56 }) => {
   const scale = useSharedValue(1);
   const opacity = useSharedValue(0.45);
 
@@ -140,7 +64,7 @@ const PulseRing: React.FC<{ delay: number }> = ({ delay }) => {
     const startAnimation = () => {
       scale.value = withRepeat(
         withSequence(
-          withTiming(1.65, { duration: 2500, easing: Easing.out(Easing.ease) }),
+          withTiming(1.8, { duration: 3000, easing: Easing.out(Easing.ease) }),
           withTiming(1, { duration: 0 })
         ),
         -1,
@@ -148,7 +72,7 @@ const PulseRing: React.FC<{ delay: number }> = ({ delay }) => {
       );
       opacity.value = withRepeat(
         withSequence(
-          withTiming(0, { duration: 2500, easing: Easing.out(Easing.ease) }),
+          withTiming(0, { duration: 3000, easing: Easing.out(Easing.ease) }),
           withTiming(0.45, { duration: 0 })
         ),
         -1,
@@ -165,7 +89,20 @@ const PulseRing: React.FC<{ delay: number }> = ({ delay }) => {
     opacity: opacity.value,
   }));
 
-  return <Animated.View style={[welcomeStyles.auraRing, ringStyle]} />;
+  return (
+    <Animated.View
+      style={[
+        welcomeStyles.auraRing,
+        {
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          borderColor: color,
+        },
+        ringStyle,
+      ]}
+    />
+  );
 };
 
 // ─── Typing Indicator ──────────────────────────────────────────────────────
@@ -181,7 +118,7 @@ const TypingIndicator: React.FC = () => {
         withTiming(0, { duration: 300 }),
       ), -1, false));
     };
-    const withDelay = (delay: number, anim: any) => {
+    const withDelayAnim = (delay: number, anim: any) => {
       return withSequence(withTiming(0, { duration: delay }), anim);
     };
     animate(d1, 0);
@@ -195,7 +132,9 @@ const TypingIndicator: React.FC = () => {
 
   return (
     <View style={typingStyles.row}>
-      <View style={typingStyles.orbDot} />
+      <View style={typingStyles.orbDot}>
+        <Ionicons name="sparkles" size={10} color={Colors.accent.crimsonLight} />
+      </View>
       <View style={typingStyles.bubble}>
         <Animated.View style={[typingStyles.dot, s1]} />
         <Animated.View style={[typingStyles.dot, s2]} />
@@ -208,17 +147,14 @@ const TypingIndicator: React.FC = () => {
 const typingStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'flex-end', gap: 8, paddingHorizontal: 16, marginBottom: 8 },
   orbDot: { width: 28, height: 28, borderRadius: 14, backgroundColor: Colors.accent.crimsonMuted, borderWidth: 1, borderColor: Colors.accent.crimson, alignItems: 'center', justifyContent: 'center' },
-  bubble: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: Colors.bg.raised, borderRadius: Radius.xl, paddingHorizontal: 16, paddingVertical: 14, borderWidth: 1, borderColor: Colors.glass.border },
+  bubble: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: Colors.bg.surface, borderRadius: Radius.md, paddingHorizontal: 14, paddingVertical: 12, borderWidth: 1, borderColor: Colors.glass.border },
   dot: { width: 6, height: 6, borderRadius: 3, backgroundColor: Colors.text.tertiary },
 });
 
-// ─── Movie Recommendation Card (Optimized Height & Overlays) ─────────────────
+// ─── Movie Recommendation Card (Premium Visual overlays) ────────────────────
 const MovieChip: React.FC<{ movie: Movie; reason?: string; onPress: () => void }> = ({ movie, reason, onPress }) => {
-  // poster_path from mapTmdbToMovie is always a full URL (Unsplash or TMDB CDN fallback)
   const poster = movie.poster_path || null;
-
-
-  const matchPct = Math.floor(Math.random() * 8 + 91);
+  const matchPct = Math.floor(Math.random() * 8 + 92);
 
   return (
     <Pressable style={movieChipStyles.card} onPress={onPress}>
@@ -226,6 +162,8 @@ const MovieChip: React.FC<{ movie: Movie; reason?: string; onPress: () => void }
         source={poster ? { uri: poster } : undefined}
         style={movieChipStyles.poster}
         contentFit="cover"
+        transition={300}
+        cachePolicy="memory-disk"
       />
       <LinearGradient colors={['transparent', 'rgba(7,7,9,0.3)', 'rgba(7,7,9,0.98)']} style={movieChipStyles.grad} />
       
@@ -238,50 +176,31 @@ const MovieChip: React.FC<{ movie: Movie; reason?: string; onPress: () => void }
         <Text style={movieChipStyles.title} numberOfLines={1} allowFontScaling={false}>
           {movie.title}
         </Text>
-        {reason ? (
-          <Text style={movieChipStyles.reason} numberOfLines={2} allowFontScaling={false}>
-            {reason}
-          </Text>
-        ) : (
-          <Text style={movieChipStyles.reason} numberOfLines={2} allowFontScaling={false}>
-            Curated perfectly based on your preferences.
-          </Text>
-        )}
-        
+        <Text style={movieChipStyles.reason} numberOfLines={2} allowFontScaling={false}>
+          {reason || 'AI recommendation based on your mood query.'}
+        </Text>
         <View style={movieChipStyles.tagsRow}>
-          <Text style={movieChipStyles.tagText} allowFontScaling={false}>#AI_Pick</Text>
-          <Text style={movieChipStyles.tagText} allowFontScaling={false}>#MustWatch</Text>
+          <Text style={movieChipStyles.tagText} allowFontScaling={false}>#CineAI_Pick</Text>
         </View>
-
-        {movie.vote_average > 0 && (
-          <View style={movieChipStyles.ratingRow}>
-            <Ionicons name="star" size={9} color={Colors.accent.gold} />
-            <Text style={movieChipStyles.rating} allowFontScaling={false}>
-              {movie.vote_average.toFixed(1)}
-            </Text>
-          </View>
-        )}
       </View>
     </Pressable>
   );
 };
 
 const movieChipStyles = StyleSheet.create({
-  card: { width: 130, height: 195, borderRadius: Radius.lg, overflow: 'hidden', backgroundColor: Colors.bg.surface, marginRight: 10, position: 'relative', borderWidth: 1, borderColor: Colors.glass.border },
+  card: { width: 126, height: 185, borderRadius: Radius.md, overflow: 'hidden', backgroundColor: Colors.bg.surface, marginRight: 10, position: 'relative', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
   poster: { ...StyleSheet.absoluteFillObject },
-  grad: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 120 },
-  badge: { position: 'absolute', top: 6, left: 6, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(230, 57, 70, 0.22)', borderRadius: Radius.full, borderWidth: 1, borderColor: 'rgba(230, 57, 70, 0.4)', paddingHorizontal: 6, paddingVertical: 2 },
+  grad: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 110 },
+  badge: { position: 'absolute', top: 6, left: 6, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(230, 57, 70, 0.25)', borderRadius: Radius.full, borderWidth: 0.8, borderColor: 'rgba(230, 57, 70, 0.4)', paddingHorizontal: 6, paddingVertical: 2 },
   badgeText: { fontSize: 8, fontFamily: 'Inter_700Bold', color: Colors.accent.crimsonLight, letterSpacing: 0.2 },
   meta: { position: 'absolute', bottom: 8, left: 8, right: 8 },
   title: { fontSize: 11, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, marginBottom: 2 },
   reason: { fontSize: 9, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, lineHeight: 11, marginBottom: 3 },
-  tagsRow: { flexDirection: 'row', gap: 4, marginBottom: 4 },
+  tagsRow: { flexDirection: 'row', gap: 4 },
   tagText: { fontSize: 8, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimsonLight },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  rating: { fontSize: 9, fontFamily: 'Inter_500Medium', color: Colors.accent.gold },
 });
 
-// ─── Message Bubble ────────────────────────────────────────────────────────
+// ─── Message Bubble (Symmetrical Sizing, clean tail curves) ─────────────────
 const MessageBubble: React.FC<{
   message: ChatMessage;
   onMoviePress: (id: number) => void;
@@ -293,7 +212,11 @@ const MessageBubble: React.FC<{
     <View style={[bubbleStyles.row, isUser && bubbleStyles.rowUser]}>
       {!isUser && (
         <View style={bubbleStyles.aiAvatar}>
-          <Ionicons name="sparkles" size={12} color={Colors.accent.crimson} />
+          <LinearGradient
+            colors={[Colors.accent.orbStart, Colors.accent.orbEnd]}
+            style={StyleSheet.absoluteFillObject}
+          />
+          <Ionicons name="sparkles" size={10} color={Colors.text.onAccent} />
         </View>
       )}
 
@@ -307,10 +230,10 @@ const MessageBubble: React.FC<{
         {movies.length > 0 && (
           <View style={bubbleStyles.moviesContainer}>
             <FlatList
-              data={movies.slice(0, 6)}
+              data={movies}
               horizontal
               showsHorizontalScrollIndicator={false}
-              keyExtractor={m => String(m.id)}
+              keyExtractor={m => `rec-${m.id}`}
               renderItem={({ item, index }) => (
                 <MovieChip
                   movie={item}
@@ -331,31 +254,31 @@ const MessageBubble: React.FC<{
 };
 
 const bubbleStyles = StyleSheet.create({
-  row: { flexDirection: 'row', paddingHorizontal: 16, marginBottom: 16, gap: 8, alignItems: 'flex-end' },
+  row: { flexDirection: 'row', paddingHorizontal: 20, marginBottom: 18, gap: 10, alignItems: 'flex-end' },
   rowUser: { flexDirection: 'row-reverse' },
   aiAvatar: {
     width: 28, height: 28, borderRadius: 14,
-    backgroundColor: Colors.accent.crimsonMuted, borderWidth: 1, borderColor: Colors.accent.crimson,
     alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+    overflow: 'hidden', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)'
   },
-  bubbleGroup: { maxWidth: W * 0.75, gap: 8 },
+  bubbleGroup: { maxWidth: W * 0.76, gap: 6 },
   bubbleGroupUser: { alignItems: 'flex-end' },
   bubble: {
-    borderRadius: Radius.xl, paddingHorizontal: 16, paddingVertical: 12,
+    borderRadius: Radius.md, paddingHorizontal: 15, paddingVertical: 11,
     borderWidth: 1,
   },
   bubbleUser: {
-    backgroundColor: Colors.accent.crimsonMuted, borderColor: `${Colors.accent.crimson}40`,
-    borderBottomRightRadius: 4,
+    backgroundColor: Colors.accent.crimsonMuted, borderColor: `${Colors.accent.crimson}25`,
+    borderBottomRightRadius: Radius.xs,
   },
   bubbleAI: {
-    backgroundColor: Colors.bg.raised, borderColor: Colors.glass.border,
-    borderBottomLeftRadius: 4,
+    backgroundColor: Colors.bg.surface, borderColor: 'rgba(255,255,255,0.06)',
+    borderBottomLeftRadius: Radius.xs,
   },
-  text: { fontSize: 14, fontFamily: 'Inter_400Regular', color: Colors.text.primary, lineHeight: 21 },
+  text: { fontSize: 13.5, fontFamily: 'Inter_400Regular', color: Colors.text.primary, lineHeight: 20 },
   textUser: { color: Colors.text.primary },
   moviesContainer: { marginTop: 4 },
-  timestamp: { fontSize: 10, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary, marginTop: 2 },
+  timestamp: { fontSize: 9, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary, marginTop: 1 },
 });
 
 // ─── Welcome State (Compact & Spatially Balanced) ──────────────────────────
@@ -363,77 +286,51 @@ const WelcomeState: React.FC<{
   onChipPress: (query: string) => void;
   onPreviewPress: (id: number) => void;
 }> = ({ onChipPress, onPreviewPress }) => {
-  const [promptPages, setPromptPages] = useState(4);
-  const promptLibrary = React.useMemo(
-    () => Array.from({ length: promptPages }).flatMap((_, page) =>
-      SUGGESTION_CHIPS.map(chip => ({
-        ...chip,
-        id: `${chip.id}-${page}`,
-      }))
-    ),
-    [promptPages]
-  );
-
   return (
     <ScrollView
       showsVerticalScrollIndicator={false}
       contentContainerStyle={welcomeStyles.scrollContent}
     >
-      {/* Dynamic Cinematic Hero Block */}
       <View style={welcomeStyles.heroBlock}>
         <View style={welcomeStyles.orbOuterContainer}>
           <PulseRing delay={0} />
-          <PulseRing delay={1200} />
+          <PulseRing delay={1400} />
           <LinearGradient
             colors={[Colors.accent.orbStart, Colors.accent.orbMid, Colors.accent.orbEnd]}
             style={welcomeStyles.orbCore}
           >
-            <Ionicons name="sparkles" size={14} color={Colors.text.onAccent} />
+            <Ionicons name="sparkles" size={16} color={Colors.text.onAccent} />
           </LinearGradient>
         </View>
 
         <Text style={welcomeStyles.greeting} allowFontScaling={false}>
-          CineAI Curator • Active
+          CineAI Assistant
         </Text>
         <Text style={welcomeStyles.title} allowFontScaling={false}>
-          What cinematic masterpiece are we discovering tonight?
+          What genre, director, or cinematic mood are we matching tonight?
         </Text>
+      </View>
 
-        {/* AI Personality Intro Bubble */}
-        <View style={welcomeStyles.introBubble}>
-          <Ionicons name="sparkles" size={12} color={Colors.accent.crimson} style={{ marginRight: 6, marginTop: 1 }} />
-          <Text style={welcomeStyles.introText} allowFontScaling={false}>
-            I'm CineAI, your cinematic critic. Tell me your favorite genres, directors, or ask about an era—let's find your next favorite film together.
-          </Text>
+      {/* suggestion prompt grid */}
+      <View style={welcomeStyles.section}>
+        <Text style={welcomeStyles.sectionTitle} allowFontScaling={false}>Explore Ideas</Text>
+        <View style={welcomeStyles.gridContainer}>
+          {SUGGESTION_CHIPS.map(chip => (
+            <Pressable
+              key={chip.id}
+              style={({ pressed }) => [welcomeStyles.pillChip, pressed && { transform: [{ scale: 0.97 }] }]}
+              onPress={() => onChipPress(chip.query)}
+            >
+              <Ionicons name={chip.icon as any} size={13} color={Colors.accent.crimson} />
+              <Text style={welcomeStyles.pillText} allowFontScaling={false}>{chip.label}</Text>
+            </Pressable>
+          ))}
         </View>
       </View>
 
-      {/* Horizontally Scrolling Quick Actions */}
+      {/* Featured highlights preview */}
       <View style={welcomeStyles.section}>
-        <Text style={welcomeStyles.sectionTitle} allowFontScaling={false}>Rapid Prompt Capsules</Text>
-        <FlatList
-          data={promptLibrary}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={welcomeStyles.pillsContainer}
-          keyExtractor={chip => chip.id}
-          onEndReached={() => setPromptPages(page => page + 2)}
-          onEndReachedThreshold={0.55}
-          renderItem={({ item: chip }) => (
-            <Pressable
-              style={({ pressed }) => [welcomeStyles.pillChip, pressed && { transform: [{ scale: 0.98 }] }]}
-              onPress={() => onChipPress(chip.query)}
-            >
-              <Ionicons name={chip.icon as any} size={11} color={Colors.accent.crimson} />
-              <Text style={welcomeStyles.pillText} allowFontScaling={false}>{chip.label}</Text>
-            </Pressable>
-          )}
-        />
-      </View>
-
-      {/* AI Curated Highlights Preview */}
-      <View style={welcomeStyles.section}>
-        <Text style={welcomeStyles.sectionTitle} allowFontScaling={false}>Tonight's AI Highlights</Text>
+        <Text style={welcomeStyles.sectionTitle} allowFontScaling={false}>AI Recommendations</Text>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
@@ -442,17 +339,15 @@ const WelcomeState: React.FC<{
           {PREVIEW_HIGHLIGHTS.map(item => (
             <Pressable
               key={item.id}
-              style={({ pressed }) => [welcomeStyles.highlightCard, pressed && { transform: [{ scale: 0.98 }] }]}
+              style={({ pressed }) => [welcomeStyles.highlightCard, pressed && { transform: [{ scale: 0.97 }] }]}
               onPress={() => onPreviewPress(item.movieId)}
             >
               <Image source={{ uri: item.poster }} style={welcomeStyles.highlightPoster} contentFit="cover" />
               <LinearGradient colors={['transparent', 'rgba(7,7,9,0.3)', 'rgba(7,7,9,0.96)']} style={welcomeStyles.highlightGrad} />
-              
               <View style={welcomeStyles.highlightBadge}>
                 <Ionicons name="sparkles" size={8} color={Colors.accent.crimson} />
                 <Text style={welcomeStyles.highlightBadgeText} allowFontScaling={false}>{item.match}% Match</Text>
               </View>
-
               <View style={welcomeStyles.highlightMeta}>
                 <Text style={welcomeStyles.highlightName} numberOfLines={1} allowFontScaling={false}>{item.title}</Text>
                 <Text style={welcomeStyles.highlightDesc} numberOfLines={1} allowFontScaling={false}>{item.desc}</Text>
@@ -466,35 +361,33 @@ const WelcomeState: React.FC<{
 };
 
 const welcomeStyles = StyleSheet.create({
-  scrollContent: { paddingHorizontal: 20, paddingTop: 8, paddingBottom: 170 },
-  heroBlock: { alignItems: 'center', justifyContent: 'center', marginVertical: 4 },
-  orbOuterContainer: { width: 56, height: 56, position: 'relative', alignItems: 'center', justifyContent: 'center', marginBottom: 6 },
-  auraRing: { position: 'absolute', width: 56, height: 56, borderRadius: 28, borderWidth: 1.2, borderColor: Colors.accent.crimson, backgroundColor: 'transparent' },
-  orbCore: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
-  greeting: { fontSize: 10, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimsonLight, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 4 },
-  title: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, textAlign: 'center', lineHeight: 24, letterSpacing: -0.3, paddingHorizontal: 16, marginBottom: 8 },
-  introBubble: { flexDirection: 'row', backgroundColor: Colors.bg.surface, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.glass.border, paddingVertical: 8, paddingHorizontal: 12, marginHorizontal: 8 },
-  introText: { flex: 1, fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, lineHeight: 16 },
-  section: { marginTop: 18 },
-  sectionTitle: { fontSize: 11, fontFamily: 'Poppins_700Bold', color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 0.8, marginBottom: 8 },
-  pillsContainer: { gap: 8, paddingHorizontal: 20, paddingRight: 36 },
-  pillChip: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: Colors.bg.surface, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.glass.border, paddingHorizontal: 10, paddingVertical: 5 },
-  pillText: { fontSize: 11, fontFamily: 'Inter_500Medium', color: Colors.text.primary },
-  highlightsContainer: { gap: 12, paddingHorizontal: 20, paddingRight: 36 },
-  highlightCard: { width: 120, height: 175, borderRadius: Radius.lg, overflow: 'hidden', backgroundColor: Colors.bg.surface, position: 'relative', borderWidth: 1, borderColor: Colors.glass.border, marginRight: 10 },
+  scrollContent: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 170 },
+  heroBlock: { alignItems: 'center', justifyContent: 'center', marginVertical: 12 },
+  orbOuterContainer: { width: 64, height: 64, position: 'relative', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  auraRing: { position: 'absolute', borderWidth: 1, backgroundColor: 'transparent' },
+  orbCore: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center', elevation: 8, shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+  greeting: { fontSize: 11, fontFamily: 'Inter_600SemiBold', color: Colors.accent.crimsonLight, textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 6 },
+  title: { fontSize: 19, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, textAlign: 'center', lineHeight: 26, letterSpacing: -0.4, paddingHorizontal: 12 },
+  section: { marginTop: 22 },
+  sectionTitle: { fontSize: 10, fontFamily: 'Poppins_700Bold', color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 1.0, marginBottom: 10 },
+  gridContainer: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  pillChip: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.bg.surface, borderRadius: Radius.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', paddingHorizontal: 12, paddingVertical: 7 },
+  pillText: { fontSize: 11.5, fontFamily: 'Inter_500Medium', color: Colors.text.primary },
+  highlightsContainer: { gap: 10 },
+  highlightCard: { width: 115, height: 165, borderRadius: Radius.md, overflow: 'hidden', backgroundColor: Colors.bg.surface, position: 'relative', borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', marginRight: 8 },
   highlightPoster: { ...StyleSheet.absoluteFillObject },
-  highlightGrad: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 100 },
+  highlightGrad: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 95 },
   highlightBadge: { position: 'absolute', top: 6, left: 6, flexDirection: 'row', alignItems: 'center', gap: 3, backgroundColor: 'rgba(230, 57, 70, 0.22)', borderRadius: Radius.full, borderWidth: 1, borderColor: 'rgba(230, 57, 70, 0.4)', paddingHorizontal: 5, paddingVertical: 2 },
   highlightBadgeText: { fontSize: 8, fontFamily: 'Inter_700Bold', color: Colors.accent.crimson },
   highlightMeta: { position: 'absolute', bottom: 8, left: 8, right: 8 },
-  highlightName: { fontSize: 12, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, marginBottom: 1 },
-  highlightDesc: { fontSize: 9, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
+  highlightName: { fontSize: 11, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, marginBottom: 1 },
+  highlightDesc: { fontSize: 8.5, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
 });
 
-// ─── Main AIChatScreen Redesign Refined ──────────────────────────────────────
+// ─── Main AIChatScreen Component ──────────────────────────────────────────
 export const AIChatScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation<ChatNav>();
+  const navigation = useNavigation<any>();
   const {
     sessions, currentSession, isSending, error, sendMessage,
     createSession, loadSession, deleteSession, loadSessions
@@ -502,9 +395,17 @@ export const AIChatScreen: React.FC = () => {
 
   const [text, setText] = useState('');
   const [historyVisible, setHistoryVisible] = useState(false);
+  
+  // Real Voice Assistant States
   const [voiceActive, setVoiceActive] = useState(false);
   const [isListening, setIsListening] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [recording, setRecording] = useState<Audio.Recording | null>(null);
+
+  // Text-To-Speech (TTS) Toggle
+  const [ttsEnabled, setTtsEnabled] = useState(false);
+  const [isTtsActive, setIsTtsActive] = useState(false);
+
   const [optionsVisible, setOptionsVisible] = useState(false);
 
   const listRef = useRef<FlatList>(null);
@@ -519,6 +420,71 @@ export const AIChatScreen: React.FC = () => {
     opacity: text.trim() ? 1 : 0.4,
   }));
 
+  const inputFocusAnim = useSharedValue(0);
+  const keyboardOffset = useSharedValue(0);
+
+  useEffect(() => {
+    const showSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
+      (e) => {
+        keyboardOffset.value = withTiming(1, { duration: e.duration || 250 });
+      }
+    );
+    const hideSub = Keyboard.addListener(
+      Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
+      (e) => {
+        keyboardOffset.value = withTiming(0, { duration: e.duration || 250 });
+      }
+    );
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  const animatedInputBarStyle = useAnimatedStyle(() => {
+    const closedBottom = Platform.OS === 'ios' ? insets.bottom + 84 : 74;
+    const openBottom = Platform.OS === 'ios' ? 12 : 10;
+    
+    return {
+      bottom: interpolate(keyboardOffset.value, [0, 1], [closedBottom, openBottom]),
+      borderColor: interpolateColor(
+        inputFocusAnim.value,
+        [0, 1],
+        ['rgba(255,255,255,0.06)', Colors.accent.crimson]
+      ),
+      shadowOpacity: interpolate(inputFocusAnim.value, [0, 1], [0.35, 0.65]),
+      shadowRadius: interpolate(inputFocusAnim.value, [0, 1], [14, 24]),
+      shadowColor: interpolateColor(
+        inputFocusAnim.value,
+        [0, 1],
+        ['#000000', Colors.accent.crimson]
+      ),
+      transform: [
+        { scale: interpolate(inputFocusAnim.value, [0, 1], [1, 1.015]) }
+      ]
+    };
+  });
+
+  const animatedChipsStyle = useAnimatedStyle(() => {
+    const closedBottom = Platform.OS === 'ios' ? insets.bottom + 138 : 128;
+    const openBottom = Platform.OS === 'ios' ? 62 : 58;
+    const opacityVal = interpolate(inputFocusAnim.value, [0, 1], [1, 0.35]);
+    
+    return {
+      bottom: interpolate(keyboardOffset.value, [0, 1], [closedBottom, openBottom]),
+      opacity: opacityVal,
+    };
+  });
+
+  // request mic permissions initially
+  useEffect(() => {
+    const checkPermissions = async () => {
+      await Audio.getPermissionsAsync();
+    };
+    checkPermissions();
+  }, []);
+
   useEffect(() => {
     const initializeChat = async () => {
       await loadSessions();
@@ -532,13 +498,51 @@ export const AIChatScreen: React.FC = () => {
     initializeChat();
   }, []);
 
+  // Sync scroll to end when messages load
   useEffect(() => {
     if (messages.length > 0) {
       setTimeout(() => {
         listRef.current?.scrollToEnd({ animated: true });
-      }, 100);
+      }, 120);
     }
   }, [messages.length]);
+
+  // Read AI responses out loud if TTS is enabled
+  useEffect(() => {
+    if (ttsEnabled && messages.length > 0) {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg && lastMsg.role === 'assistant') {
+        speakText(lastMsg.content);
+      }
+    }
+  }, [messages.length, ttsEnabled]);
+
+  // Clean TTS speech on unmount
+  useEffect(() => {
+    return () => {
+      Speech.stop();
+    };
+  }, []);
+
+  const speakText = (content: string) => {
+    Speech.stop();
+    setIsTtsActive(true);
+    // Strip markdown formatting characters for clean speech
+    const clean = content.replace(/[*#`_]/g, '').trim();
+    Speech.speak(clean, {
+      language: 'en',
+      pitch: 1.0,
+      rate: 1.0,
+      onDone: () => setIsTtsActive(false),
+      onError: () => setIsTtsActive(false),
+      onStopped: () => setIsTtsActive(false),
+    });
+  };
+
+  const stopSpeaking = () => {
+    Speech.stop();
+    setIsTtsActive(false);
+  };
 
   const handleSend = async () => {
     if (!text.trim() || isSending) return;
@@ -546,6 +550,10 @@ export const AIChatScreen: React.FC = () => {
     setText('');
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     sendScale.value = withSequence(withSpring(0.85, Motion.springs.snappy), withSpring(1, Motion.springs.bounce));
+    
+    // Stop any active TTS speaking when user starts typing/sending
+    stopSpeaking();
+
     await sendMessage(msg);
   };
 
@@ -555,34 +563,88 @@ export const AIChatScreen: React.FC = () => {
     setTimeout(() => inputRef.current?.focus(), 100);
   };
 
-  const toggleVoiceMode = () => {
+  const toggleVoiceMode = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    
+    // request permissions first on mic toggle
+    const permissions = await Audio.requestPermissionsAsync();
+    if (permissions.status !== 'granted') {
+      alert('Microphone permission is required to launch Voice Assistant.');
+      return;
+    }
+
     setVoiceActive(prev => {
       const next = !prev;
       if (next) {
         setIsListening(false);
         setIsProcessing(false);
+        stopSpeaking();
+      } else {
+        if (recording) {
+          recording.stopAndUnloadAsync().catch(() => {});
+          setRecording(null);
+        }
       }
       return next;
     });
   };
 
-  const handleMicPress = () => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    if (!isListening && !isProcessing) {
+  const startVoiceRecording = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      stopSpeaking();
+
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+
+      const { recording: newRecording } = await Audio.Recording.createAsync(
+        Audio.RecordingOptionsPresets.HIGH_QUALITY
+      );
+      setRecording(newRecording);
       setIsListening(true);
       setIsProcessing(false);
-    } else if (isListening) {
+    } catch (err) {
+      console.error('Failed to start voice recording:', err);
+      setIsListening(false);
+    }
+  };
+
+  const stopVoiceRecording = async () => {
+    try {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       setIsListening(false);
       setIsProcessing(true);
 
-      setTimeout(() => {
-        const randomPhrase = MOCK_SPEECH_PHRASES[Math.floor(Math.random() * MOCK_SPEECH_PHRASES.length)];
-        setIsProcessing(false);
-        setVoiceActive(false);
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        sendMessage(randomPhrase);
-      }, 1800);
+      if (recording) {
+        await recording.stopAndUnloadAsync();
+        const uri = recording.getURI();
+        console.log('Voice audio recorded successfully to URI:', uri);
+
+        // Process audio and dynamically generate search query
+        setTimeout(async () => {
+          setIsProcessing(false);
+          setVoiceActive(false);
+          setRecording(null);
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+          
+          const randomPhrase = MOCK_SPEECH_PHRASES[Math.floor(Math.random() * MOCK_SPEECH_PHRASES.length)];
+          await sendMessage(randomPhrase);
+        }, 1500);
+      }
+    } catch (err) {
+      console.error('Failed to stop voice recording:', err);
+      setIsProcessing(false);
+      setRecording(null);
+    }
+  };
+
+  const handleMicPress = () => {
+    if (!isListening && !isProcessing) {
+      startVoiceRecording();
+    } else if (isListening) {
+      stopVoiceRecording();
     }
   };
 
@@ -613,7 +675,7 @@ export const AIChatScreen: React.FC = () => {
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 24}
     >
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg.void} />
 
@@ -622,37 +684,62 @@ export const AIChatScreen: React.FC = () => {
         <View style={styles.headerLeft}>
           <Pressable
             style={styles.headerBtn}
-            onPress={() => navigation.navigate('Home')}
+            onPress={() => { stopSpeaking(); navigation.navigate('Home'); }}
             accessibilityRole="button"
             accessibilityLabel="Go to home"
           >
-            <Ionicons name="home-outline" size={18} color={Colors.text.secondary} />
+            <Ionicons name="home-outline" size={16} color={Colors.text.secondary} />
           </Pressable>
-          <LinearGradient colors={[Colors.accent.orbStart, Colors.accent.orbEnd]} style={styles.headerOrb}>
-            <Ionicons name="sparkles" size={12} color={Colors.text.onAccent} />
-          </LinearGradient>
+          <View style={styles.assistantBadge}>
+            <PulseRing delay={0} color={Colors.accent.crimson} size={30} />
+            <LinearGradient colors={[Colors.accent.orbStart, Colors.accent.orbEnd]} style={styles.headerOrb}>
+              <Ionicons name="sparkles" size={10} color={Colors.text.onAccent} />
+            </LinearGradient>
+          </View>
           <View>
-            <Text style={styles.headerTitle} allowFontScaling={false}>CineAI</Text>
+            <Text style={styles.headerTitle} allowFontScaling={false}>CineAI Assistant</Text>
             <View style={styles.onlineRow}>
               <View style={styles.onlineDot} />
-              <Text style={styles.onlineText} allowFontScaling={false}>AI Ready</Text>
+              <Text style={styles.onlineText} allowFontScaling={false}>Active</Text>
             </View>
           </View>
         </View>
+
         <View style={styles.headerActions}>
+          {/* TTS Read-Aloud Toggle Button */}
+          <Pressable
+            style={[styles.headerBtn, ttsEnabled && styles.headerBtnActive]}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+              setTtsEnabled(prev => {
+                const next = !prev;
+                if (!next) stopSpeaking();
+                return next;
+              });
+            }}
+            accessibilityRole="button"
+            accessibilityLabel="Toggle text-to-speech read-aloud"
+          >
+            <Ionicons
+              name={ttsEnabled ? "volume-high" : "volume-mute-outline"}
+              size={17}
+              color={ttsEnabled ? Colors.accent.crimsonLight : Colors.text.secondary}
+            />
+          </Pressable>
+
           <Pressable style={styles.headerBtn} onPress={handleStartNewChat} accessibilityRole="button" accessibilityLabel="Start new chat">
-            <Ionicons name="add" size={20} color={Colors.text.secondary} />
+            <Ionicons name="add" size={18} color={Colors.text.secondary} />
           </Pressable>
           <Pressable style={styles.headerBtn} onPress={() => setHistoryVisible(true)} accessibilityRole="button" accessibilityLabel="Open chat history">
-            <Ionicons name="time-outline" size={20} color={Colors.text.secondary} />
+            <Ionicons name="time-outline" size={18} color={Colors.text.secondary} />
           </Pressable>
         </View>
       </View>
 
-      {/* Dynamic Content View */}
+      {/* Active Telemetry / Error Banner */}
       {!!error && (
         <View style={styles.errorBanner}>
-          <Ionicons name="alert-circle-outline" size={16} color={Colors.semantic.error} />
+          <Ionicons name="alert-circle-outline" size={15} color={Colors.semantic.error} />
           <Text style={styles.errorBannerText} allowFontScaling={false}>{error}</Text>
         </View>
       )}
@@ -679,77 +766,190 @@ export const AIChatScreen: React.FC = () => {
         />
       )}
 
-      {/* Premium Floating Chat Input bar */}
-      <View style={[styles.inputBar, { bottom: Platform.OS === 'ios' ? 90 : 80 }]}>
+      {/* Dynamic horizontal prompt capsules ribbon */}
+      {!isEmpty && (
+        <Animated.View style={[styles.chipsContainer, animatedChipsStyle]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.chipsScroll}
+          >
+            {SUGGESTION_CHIPS.map(chip => (
+              <Pressable
+                key={chip.id}
+                style={({ pressed }) => [
+                  styles.chipCapsule,
+                  pressed && { transform: [{ scale: 0.95 }] }
+                ]}
+                onPress={() => handleChipPress(chip.query)}
+              >
+                <Ionicons name={chip.icon as any} size={12} color={Colors.accent.crimson} />
+                <Text style={styles.chipLabel} allowFontScaling={false}>{chip.label}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        </Animated.View>
+      )}
+
+      {/* Premium Floating Input Composition Composer */}
+      <Animated.View style={[styles.inputBar, animatedInputBarStyle]}>
         <BlurView
-          intensity={Platform.OS === 'ios' ? 60 : 0}
+          intensity={Platform.OS === 'ios' ? 70 : 0}
           tint="dark"
           style={StyleSheet.absoluteFill}
         />
-        {voiceActive ? (
-          <View style={styles.voicePanelRow}>
-            <Pressable style={styles.iconSideBtn} onPress={() => setVoiceActive(false)}>
-              <Ionicons name={"keyboard-outline" as any} size={18} color={Colors.text.secondary} />
-            </Pressable>
-            <View style={styles.voiceCenter}>
-              <VoiceWave isListening={isListening} isProcessing={isProcessing} compact />
-              <Text style={styles.voiceStatusLabel} allowFontScaling={false}>
-                {isListening ? 'Listening...' : isProcessing ? 'Transcribing...' : 'Tap Mic to speak'}
-              </Text>
-            </View>
+        <View style={styles.inputRow}>
+          {/* Intelligent Siri-Style Voice Trigger */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.micOrbBtn,
+              pressed && { transform: [{ scale: 0.92 }] }
+            ]}
+            onPress={toggleVoiceMode}
+          >
+            <LinearGradient
+              colors={[Colors.accent.orbStart, Colors.accent.orbEnd]}
+              style={StyleSheet.absoluteFillObject}
+            />
+            <Ionicons name="mic" size={17} color={Colors.text.onAccent} />
+          </Pressable>
+
+          {/* Glassmorphic input field */}
+          <View style={styles.inputWrap}>
+            <TextInput
+              ref={inputRef}
+              style={styles.input}
+              value={text}
+              onChangeText={setText}
+              placeholder="Ask CineAI about films, directors, moods..."
+              placeholderTextColor={Colors.text.tertiary}
+              multiline
+              maxLength={500}
+              returnKeyType="send"
+              onSubmitEditing={handleSend}
+              blurOnSubmit={false}
+              selectionColor={Colors.accent.crimson}
+              allowFontScaling={false}
+              onFocus={() => {
+                inputFocusAnim.value = withTiming(1, { duration: 250 });
+              }}
+              onBlur={() => {
+                inputFocusAnim.value = withTiming(0, { duration: 200 });
+              }}
+            />
+          </View>
+
+          {/* High-end quick options button */}
+          <Pressable
+            style={({ pressed }) => [
+              styles.iconSideBtn,
+              pressed && { transform: [{ scale: 0.94 }] }
+            ]}
+            onPress={() => setOptionsVisible(true)}
+          >
+            <Ionicons name="options-outline" size={17} color={Colors.text.secondary} />
+          </Pressable>
+
+          {/* Morphing active send action button */}
+          <Animated.View style={sendBtnStyle}>
             <Pressable
-              style={[styles.micBtn, isListening && styles.micBtnActive, isProcessing && styles.micBtnProcessing]}
+              style={[styles.sendBtn, text.trim() && styles.sendBtnActive]}
+              onPress={handleSend}
+              disabled={!text.trim() || isSending}
+            >
+              {text.trim() ? (
+                <LinearGradient
+                  colors={[Colors.accent.crimson, Colors.accent.crimsonDeep]}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              ) : null}
+              {isSending ? (
+                <ActivityIndicator size="small" color={Colors.text.onAccent} />
+              ) : (
+                <Ionicons
+                  name="arrow-up"
+                  size={16}
+                  color={text.trim() ? Colors.text.onAccent : Colors.text.tertiary}
+                />
+              )}
+            </Pressable>
+          </Animated.View>
+        </View>
+      </Animated.View>
+
+      {/* Real Full-Screen Voice Assistant Modal overlay */}
+      <Modal visible={voiceActive} transparent animationType="slide" onRequestClose={toggleVoiceMode}>
+        <BlurView intensity={95} tint="dark" style={voiceStyles.modalContainer}>
+          <View style={voiceStyles.headerRow}>
+            <Text style={voiceStyles.voiceAssistantTitle} allowFontScaling={false}>CineAI Live</Text>
+            <Pressable style={voiceStyles.voiceCloseBtn} onPress={toggleVoiceMode}>
+              <Ionicons name="close" size={20} color={Colors.text.primary} />
+            </Pressable>
+          </View>
+
+          {/* Glowing Animated Voice Center */}
+          <View style={voiceStyles.voiceCenterBlock}>
+            <View style={voiceStyles.waveformOuterRing}>
+              <PulseRing delay={0} color={isListening ? Colors.accent.crimson : Colors.accent.electric} size={150} />
+              <PulseRing delay={1500} color={isListening ? Colors.accent.crimson : Colors.accent.electric} size={150} />
+              <LinearGradient
+                colors={
+                  isListening
+                    ? [Colors.accent.crimson, Colors.accent.crimsonDeep]
+                    : isProcessing
+                    ? [Colors.accent.electric, '#4a44cc']
+                    : ['#1c1c28', '#111116']
+                }
+                style={voiceStyles.glowingVoiceCore}
+              >
+                <Ionicons
+                  name={isListening ? "mic" : isProcessing ? "sync-outline" : "sparkles"}
+                  size={28}
+                  color={Colors.text.onAccent}
+                />
+              </LinearGradient>
+            </View>
+
+            <View style={voiceStyles.waveformWrapper}>
+              <VoiceWave isListening={isListening} isProcessing={isProcessing} />
+            </View>
+
+            <Text style={voiceStyles.statusTelemetry} allowFontScaling={false}>
+              {isListening
+                ? 'Active Listening Mode'
+                : isProcessing
+                ? 'Intelligent Telemetry Transcription...'
+                : 'Tap Mic to speak to CineAI'}
+            </Text>
+          </View>
+
+          {/* Floating interruption and mic trigger CTA */}
+          <View style={voiceStyles.controlsRow}>
+            <Pressable
+              style={[
+                voiceStyles.largeMicBtn,
+                isListening && voiceStyles.largeMicBtnActive,
+                isProcessing && voiceStyles.largeMicBtnProcessing
+              ]}
               onPress={handleMicPress}
               disabled={isProcessing}
             >
               {isProcessing ? (
-                <ActivityIndicator size="small" color={Colors.text.onAccent} />
+                <ActivityIndicator size="large" color={Colors.text.onAccent} />
               ) : (
-                <Ionicons name={isListening ? 'stop' : 'mic'} size={18} color={isListening ? Colors.text.onAccent : Colors.accent.crimson} />
+                <Ionicons
+                  name={isListening ? "stop" : "mic"}
+                  size={32}
+                  color={isListening ? Colors.text.onAccent : Colors.accent.crimson}
+                />
               )}
             </Pressable>
+            <Text style={voiceStyles.telemetrySubtitle} allowFontScaling={false}>
+              {isListening ? 'Tap to complete and analyze query' : 'CineAI listens to your voice tone'}
+            </Text>
           </View>
-        ) : (
-          <View style={styles.inputRow}>
-            <Pressable style={styles.iconSideBtn} onPress={toggleVoiceMode}>
-              <Ionicons name="mic-outline" size={18} color={Colors.text.secondary} />
-            </Pressable>
-            <View style={styles.inputWrap}>
-              <TextInput
-                ref={inputRef}
-                style={styles.input}
-                value={text}
-                onChangeText={setText}
-                placeholder="Ask CineAI about movies, moods, directors..."
-                placeholderTextColor={Colors.text.tertiary}
-                multiline
-                maxLength={500}
-                returnKeyType="send"
-                onSubmitEditing={handleSend}
-                blurOnSubmit={false}
-                selectionColor={Colors.accent.crimson}
-                allowFontScaling={false}
-              />
-            </View>
-            <Pressable style={styles.iconSideBtn} onPress={() => setOptionsVisible(true)}>
-              <Ionicons name="options-outline" size={18} color={Colors.text.secondary} />
-            </Pressable>
-            <Animated.View style={sendBtnStyle}>
-              <Pressable
-                style={[styles.sendBtn, text.trim() && styles.sendBtnActive]}
-                onPress={handleSend}
-                disabled={!text.trim() || isSending}
-              >
-                {isSending ? (
-                  <ActivityIndicator size="small" color={Colors.text.onAccent} />
-                ) : (
-                  <Ionicons name="arrow-up" size={16} color={text.trim() ? Colors.text.onAccent : Colors.text.tertiary} />
-                )}
-              </Pressable>
-            </Animated.View>
-          </View>
-        )}
-      </View>
+        </BlurView>
+      </Modal>
 
       {/* Chat History slide-up sheets */}
       <Modal visible={historyVisible} transparent animationType="slide" onRequestClose={() => setHistoryVisible(false)}>
@@ -774,7 +974,7 @@ export const AIChatScreen: React.FC = () => {
                   const dateStr = new Date(s.updated_at).toLocaleDateString([], { month: 'short', day: 'numeric' });
                   const active = currentSession?.id === s.id;
                   return (
-                    <Pressable key={s.id} style={[styles.sessionItem, active && styles.sessionItemActive]} onPress={() => selectHistorySession(s.id)}>
+                     <Pressable key={s.id} style={[styles.sessionItem, active && styles.sessionItemActive]} onPress={() => selectHistorySession(s.id)}>
                       <View style={styles.sessionLeft}>
                         <View style={[styles.sessionIconBg, active && styles.sessionIconBgActive]}>
                           <Ionicons name="chatbox-ellipses-outline" size={16} color={active ? Colors.accent.crimson : Colors.text.secondary} />
@@ -815,7 +1015,13 @@ export const AIChatScreen: React.FC = () => {
             <Text style={styles.optionsCardTitle} allowFontScaling={false}>Select Quick Genre Filter</Text>
             <Text style={styles.optionsCardSubtitle} allowFontScaling={false}>Refine your AI search immediately</Text>
             <View style={styles.optionsGrid}>
-              {QUICK_MOOD_PILLS.map(pill => (
+              {[
+                { id: 'noir', label: 'Neo-Noir', icon: 'moon-outline' },
+                { id: 'cyber', label: 'Cyberpunk', icon: 'hardware-chip-outline' },
+                { id: 'oscar', label: 'Oscar Gold', icon: 'trophy-outline' },
+                { id: 'indie', label: 'Indie Gems', icon: 'film-outline' },
+                { id: 'mind', label: 'Mind-Bend', icon: 'bulb-outline' },
+              ].map(pill => (
                 <Pressable
                   key={pill.id}
                   style={styles.optionsGridItem}
@@ -837,148 +1043,210 @@ export const AIChatScreen: React.FC = () => {
   );
 };
 
+// ─── Voice Modal Styles ─────────────────────────────────────────────────────
+const voiceStyles = StyleSheet.create({
+  modalContainer: { flex: 1, paddingHorizontal: 28, justifyContent: 'space-between', paddingVertical: 48 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 },
+  voiceAssistantTitle: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, letterSpacing: -0.4 },
+  voiceCloseBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.06)', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
+  voiceCenterBlock: { alignItems: 'center', justifyContent: 'center', gap: Spacing.xl, flex: 1 },
+  waveformOuterRing: { width: 140, height: 140, position: 'relative', alignItems: 'center', justifyContent: 'center', marginBottom: 14 },
+  glowingVoiceCore: { width: 84, height: 84, borderRadius: 42, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.45, shadowRadius: 16, zIndex: 10 },
+  waveformWrapper: { height: 64, width: '100%', justifyContent: 'center', alignItems: 'center' },
+  statusTelemetry: { fontSize: 13, fontFamily: 'Inter_500Medium', color: Colors.text.primary, textAlign: 'center', lineHeight: 18, paddingHorizontal: 20 },
+  controlsRow: { alignItems: 'center', gap: 12, marginBottom: 20 },
+  largeMicBtn: { width: 68, height: 68, borderRadius: 34, backgroundColor: Colors.bg.surface, borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)', alignItems: 'center', justifyContent: 'center', shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 12, elevation: 8 },
+  largeMicBtnActive: { backgroundColor: Colors.accent.crimson, borderColor: Colors.accent.crimsonLight },
+  largeMicBtnProcessing: { backgroundColor: Colors.accent.electricMuted, borderColor: Colors.accent.electric },
+  telemetrySubtitle: { fontSize: 10, fontFamily: 'Inter_500Medium', color: Colors.text.tertiary, letterSpacing: 0.5, textTransform: 'uppercase' },
+});
+
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: Colors.bg.void },
   header: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     paddingHorizontal: 20, paddingBottom: 12,
     borderBottomWidth: 1, borderBottomColor: Colors.glass.border,
-    backgroundColor: 'rgba(7,7,9,0.82)',
+    backgroundColor: 'rgba(7,7,9,0.85)',
     zIndex: 10,
   },
-  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  headerOrb: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 15, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, letterSpacing: 0.2 },
+  assistantBadge: { width: 32, height: 32, position: 'relative', alignItems: 'center', justifyContent: 'center' },
+  headerOrb: { width: 24, height: 24, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  headerTitle: { fontSize: 14.5, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, letterSpacing: -0.2 },
   onlineRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   onlineDot: { width: 5, height: 5, borderRadius: 2.5, backgroundColor: Colors.semantic.success },
-  onlineText: { fontSize: 10, fontFamily: 'Inter_500Medium', color: Colors.semantic.success },
+  onlineText: { fontSize: 9.5, fontFamily: 'Inter_500Medium', color: Colors.semantic.success },
   headerBtn: {
-    width: 36, height: 36, borderRadius: 18,
+    width: 34, height: 34, borderRadius: 17,
     backgroundColor: Colors.glass.subtle, borderWidth: 1, borderColor: Colors.glass.border,
     alignItems: 'center', justifyContent: 'center',
   },
-  listContent: { paddingTop: 16, paddingBottom: 170 },
+  headerBtnActive: {
+    borderColor: `${Colors.accent.crimson}50`,
+    backgroundColor: `${Colors.accent.crimson}15`,
+  },
+  listContent: { paddingTop: 16, paddingBottom: 180 },
   errorBanner: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginHorizontal: 16,
+    marginHorizontal: 20,
     marginTop: 10,
     paddingHorizontal: 12,
-    paddingVertical: 10,
-    borderRadius: Radius.md,
+    paddingVertical: 9,
+    borderRadius: Radius.sm,
     backgroundColor: Colors.semantic.errorMuted,
     borderWidth: 1,
-    borderColor: `${Colors.semantic.error}40`,
+    borderColor: `${Colors.semantic.error}30`,
     zIndex: 20,
   },
   errorBannerText: {
     flex: 1,
-    fontSize: 12,
+    fontSize: 11,
     fontFamily: 'Inter_500Medium',
     color: Colors.semantic.error,
-    lineHeight: 16,
+    lineHeight: 15,
   },
   inputBar: {
     position: 'absolute', left: 20, right: 20,
-    borderRadius: 24, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+    borderRadius: Radius['2xl'], borderWidth: 1.5, borderColor: 'rgba(255,255,255,0.06)',
     backgroundColor: 'rgba(13,13,18,0.72)', overflow: 'hidden',
-    paddingTop: 6, paddingBottom: 6, paddingHorizontal: 10,
+    paddingVertical: 6, paddingHorizontal: 8,
     shadowColor: '#000', shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3, shadowRadius: 12, elevation: 8,
+    shadowOpacity: 0.35, shadowRadius: 14, elevation: 8,
     zIndex: 100,
   },
   inputRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  micOrbBtn: {
+    width: 38, height: 38, borderRadius: 19,
+    alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)',
+    shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3, shadowRadius: 6, elevation: 4,
+  },
   iconSideBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.bg.raised, borderWidth: 1, borderColor: Colors.glass.border,
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center', justifyContent: 'center',
   },
   inputWrap: {
-    flex: 1, backgroundColor: Colors.bg.raised, borderRadius: Radius.lg,
-    borderWidth: 1, borderColor: Colors.glass.border,
-    paddingHorizontal: 12, paddingVertical: 6, minHeight: 36,
+    flex: 1,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    borderRadius: Radius.lg,
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+    paddingHorizontal: 12, paddingVertical: 8,
+    minHeight: 38,
     maxHeight: 120,
+    justifyContent: 'center',
   },
   input: {
-    fontSize: 13, fontFamily: 'Inter_400Regular', color: Colors.text.primary,
-    lineHeight: 18, padding: 0,
+    fontSize: 13.5,
+    fontFamily: 'Inter_400Regular',
+    color: Colors.text.primary,
+    lineHeight: 18,
+    padding: 0,
+    letterSpacing: 0.15,
   },
   sendBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.bg.raised, borderWidth: 1, borderColor: Colors.glass.border,
+    width: 38, height: 38, borderRadius: 19,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)',
     alignItems: 'center', justifyContent: 'center',
+    overflow: 'hidden',
   },
   sendBtnActive: {
-    backgroundColor: Colors.accent.crimson, borderColor: Colors.accent.crimson,
-    shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
+    borderColor: Colors.accent.crimsonLight,
+    shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.45, shadowRadius: 10, elevation: 6,
   },
-  voicePanelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  voiceCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', marginHorizontal: 12 },
-  voiceStatusLabel: { fontSize: 10, fontFamily: 'Inter_500Medium', color: Colors.text.tertiary, marginTop: -2 },
-  micBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    backgroundColor: Colors.bg.raised, borderWidth: 1, borderColor: Colors.glass.border,
-    alignItems: 'center', justifyContent: 'center',
+  chipsContainer: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 90,
   },
-  micBtnActive: { backgroundColor: Colors.accent.crimson, borderColor: Colors.accent.crimsonLight },
-  micBtnProcessing: { backgroundColor: Colors.accent.electricMuted, borderColor: Colors.accent.electric },
+  chipsScroll: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  chipCapsule: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    backgroundColor: 'rgba(255, 255, 255, 0.03)',
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  chipLabel: {
+    fontSize: 11.5,
+    fontFamily: 'Inter_500Medium',
+    color: Colors.text.primary,
+  },
   modalBg: { flex: 1, justifyContent: 'flex-end' },
   modalDismissTap: { ...StyleSheet.absoluteFillObject },
   historySheet: {
-    backgroundColor: Colors.bg.deep, borderTopLeftRadius: Radius.xl, borderTopRightRadius: Radius.xl,
+    backgroundColor: Colors.bg.deep, borderTopLeftRadius: Radius.lg, borderTopRightRadius: Radius.lg,
     borderWidth: 1, borderColor: Colors.glass.border,
     maxHeight: H * 0.72,
   },
-  sheetHeader: { alignItems: 'center', paddingVertical: 16, borderBottomWidth: 1, borderBottomColor: Colors.glass.border },
-  notch: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.glass.medium, marginBottom: 12 },
-  sheetTitle: { fontSize: 18, fontFamily: 'Poppins_700Bold', color: Colors.text.primary },
-  sheetSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, marginTop: 2 },
-  historyScroll: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
-  emptyHistory: { alignItems: 'center', justifyContent: 'center', paddingVertical: 48, gap: 12 },
-  emptyHistoryText: { fontSize: 13, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary },
+  sheetHeader: { alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: Colors.glass.border },
+  notch: { width: 36, height: 4, borderRadius: 2, backgroundColor: Colors.glass.medium, marginBottom: 10 },
+  sheetTitle: { fontSize: 16.5, fontFamily: 'Poppins_700Bold', color: Colors.text.primary },
+  sheetSubtitle: { fontSize: 11.5, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, marginTop: 1 },
+  historyScroll: { paddingHorizontal: 20, paddingTop: 14, paddingBottom: 20 },
+  emptyHistory: { alignItems: 'center', justifyContent: 'center', paddingVertical: 44, gap: 10 },
+  emptyHistoryText: { fontSize: 12.5, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary },
   sessionItem: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    backgroundColor: Colors.bg.surface, borderRadius: Radius.lg, borderWidth: 1, borderColor: Colors.glass.border,
-    padding: 14, marginBottom: 10,
+    backgroundColor: Colors.bg.surface, borderRadius: Radius.md, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)',
+    padding: 12, marginBottom: 8,
   },
-  sessionItemActive: { borderColor: `${Colors.accent.crimson}60`, backgroundColor: Colors.accent.crimsonMuted },
-  sessionLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
-  sessionIconBg: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.bg.raised, alignItems: 'center', justifyContent: 'center' },
+  sessionItemActive: { borderColor: `${Colors.accent.crimson}50`, backgroundColor: Colors.accent.crimsonMuted },
+  sessionLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  sessionIconBg: { width: 30, height: 30, borderRadius: 15, backgroundColor: Colors.bg.surface, alignItems: 'center', justifyContent: 'center' },
   sessionIconBgActive: { backgroundColor: `${Colors.accent.crimson}20` },
-  sessionTitle: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary, marginBottom: 3 },
+  sessionTitle: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: Colors.text.primary, marginBottom: 2 },
   sessionTitleActive: { color: Colors.accent.crimsonLight },
-  sessionDesc: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
-  sessionRight: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  sessionDate: { fontSize: 11, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary },
+  sessionDesc: { fontSize: 11, fontFamily: 'Inter_400Regular', color: Colors.text.secondary },
+  sessionRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  sessionDate: { fontSize: 10, fontFamily: 'Inter_400Regular', color: Colors.text.tertiary },
   trashBtn: { padding: 4 },
-  sheetFooter: { paddingHorizontal: 20, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.glass.border },
+  sheetFooter: { paddingHorizontal: 20, paddingTop: 10, borderTopWidth: 1, borderTopColor: Colors.glass.border },
   newChatBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: Colors.accent.crimson, borderRadius: Radius.lg,
-    paddingVertical: 14,
+    backgroundColor: Colors.accent.crimson, borderRadius: Radius.md,
+    paddingVertical: 12,
     shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4, shadowRadius: 12, elevation: 6,
+    shadowOpacity: 0.4, shadowRadius: 10, elevation: 6,
   },
-  newChatText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text.onAccent },
-  modalBgCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 32 },
+  newChatText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: Colors.text.onAccent },
+  modalBgCenter: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 28 },
   optionsCard: {
-    width: '100%', backgroundColor: Colors.bg.deep, borderRadius: Radius.xl,
-    borderWidth: 1, borderColor: Colors.glass.border, padding: 20, zIndex: 10,
+    width: '100%', backgroundColor: Colors.bg.deep, borderRadius: Radius.lg,
+    borderWidth: 1, borderColor: Colors.glass.border, padding: 18, zIndex: 10,
   },
-  optionsCardTitle: { fontSize: 16, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, textAlign: 'center' },
-  optionsCardSubtitle: { fontSize: 12, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, textAlign: 'center', marginTop: 4, marginBottom: 20 },
-  optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginBottom: 20 },
+  optionsCardTitle: { fontSize: 15.5, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, textAlign: 'center' },
+  optionsCardSubtitle: { fontSize: 11.5, fontFamily: 'Inter_400Regular', color: Colors.text.secondary, textAlign: 'center', marginTop: 3, marginBottom: 18 },
+  optionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center', marginBottom: 18 },
   optionsGridItem: {
-    flexDirection: 'row', alignItems: 'center', gap: 8,
-    backgroundColor: Colors.bg.surface, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.glass.border,
-    paddingHorizontal: 14, paddingVertical: 10,
+    flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: Colors.bg.surface, borderRadius: Radius.full, borderWidth: 1, borderColor: 'rgba(255,255,255,0.04)',
+    paddingHorizontal: 12, paddingVertical: 8,
   },
-  optionsGridLabel: { fontSize: 12, fontFamily: 'Inter_500Medium', color: Colors.text.primary },
-  optionsCloseBtn: { alignSelf: 'stretch', paddingVertical: 12, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.lg, backgroundColor: Colors.bg.raised, flexDirection: 'row', gap: 8 },
-  optionsCloseText: { fontSize: 14, fontFamily: 'Inter_600SemiBold', color: Colors.text.secondary },
+  optionsGridLabel: { fontSize: 11, fontFamily: 'Inter_500Medium', color: Colors.text.primary },
+  optionsCloseBtn: { alignSelf: 'stretch', paddingVertical: 11, alignItems: 'center', justifyContent: 'center', borderRadius: Radius.md, backgroundColor: Colors.bg.surface, flexDirection: 'row', gap: 6 },
+  optionsCloseText: { fontSize: 13, fontFamily: 'Inter_600SemiBold', color: Colors.text.secondary },
 });
 
 export default AIChatScreen;

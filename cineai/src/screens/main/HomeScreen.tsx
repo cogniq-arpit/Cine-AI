@@ -328,10 +328,10 @@ const STUDIO_HUBS = [
 ];
 
 const MOOD_CATEGORIES = [
-  { id: 'dark', label: 'Dark & Tense', color: '#1A121E', accent: Colors.accent.crimson },
-  { id: 'feel', label: 'Feel Good', color: '#10221A', accent: Colors.semantic.success },
-  { id: 'mind', label: 'Mind-Bending', color: '#12162E', accent: Colors.accent.electric },
-  { id: 'epic', label: 'Epic & Grand', color: '#251A10', accent: Colors.accent.gold },
+  { id: 'dark', label: 'Dark & Tense', color: '#1A121E', accent: Colors.accent.crimson, icon: 'skull-outline', query: 'Thriller' },
+  { id: 'feel', label: 'Feel Good', color: '#10221A', accent: Colors.semantic.success, icon: 'happy-outline', query: 'Comedy' },
+  { id: 'mind', label: 'Mind-Bending', color: '#12162E', accent: Colors.accent.electric, icon: 'planet-outline', query: 'Sci-Fi' },
+  { id: 'epic', label: 'Epic & Grand', color: '#251A10', accent: Colors.accent.gold, icon: 'trophy-outline', query: 'Adventure' },
 ];
 
 // Mock watch history items for continue watching section
@@ -798,6 +798,38 @@ const RailSkeleton: React.FC = () => {
   );
 };
 
+// Reanimated spring-backed interactive Mood Card
+const MoodCard: React.FC<{
+  cat: { id: string; label: string; color: string; accent: string; icon: string; query: string };
+  onPress: () => void;
+}> = ({ cat, onPress }) => {
+  const scale = useSharedValue(1);
+  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+
+  return (
+    <Animated.View style={style}>
+      <Pressable
+        onPressIn={() => { scale.value = withSpring(0.95, Motion.springs.snappy); }}
+        onPressOut={() => { scale.value = withSpring(1, Motion.springs.bounce); }}
+        onPress={() => {
+          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+          onPress();
+        }}
+        style={[styles.moodCard, { backgroundColor: cat.color, borderColor: `${cat.accent}30` }]}
+        accessibilityRole="button"
+        accessibilityLabel={`Search movies matching mood ${cat.label}`}
+      >
+        <View style={[styles.moodAccentBar, { backgroundColor: cat.accent }]} />
+        <View style={styles.moodContentRow}>
+          <Ionicons name={cat.icon as any} size={15} color={cat.accent} style={styles.moodIcon} />
+          <Text style={styles.moodLabel} numberOfLines={1} adjustsFontSizeToFit={true} allowFontScaling={false}>{cat.label}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={12} color={cat.accent} />
+      </Pressable>
+    </Animated.View>
+  );
+};
+
 const skeletonStyles = StyleSheet.create({
   container: { marginTop: 28, paddingHorizontal: 20 },
   header: { width: 140, height: 16, borderRadius: Radius.xs, backgroundColor: Colors.bg.surface, marginBottom: 12 },
@@ -907,7 +939,7 @@ export const HomeScreen: React.FC = () => {
       }
 
     } catch (err) {
-      console.warn('Failed to load live TMDB discover rails. Retaining local fallbacks.', err);
+      console.log('Failed to load live TMDB discover rails. Retaining local fallbacks.', err);
       // Ensure robust initial offline states are populated completely with zero duplicates
       setTrending(CURATED.slice(0, 10));
       setHeroMovies(CURATED.slice(0, 5));
@@ -1137,11 +1169,13 @@ export const HomeScreen: React.FC = () => {
               <SectionHeader title="Select Your Cinematic Mood" subtitle="Let your emotions guide your selection" />
               <View style={styles.moodGrid}>
                 {MOOD_CATEGORIES.map(cat => (
-                  <Pressable key={cat.id} style={[styles.moodCard, { backgroundColor: cat.color }]}>
-                    <View style={[styles.moodAccentBar, { backgroundColor: cat.accent }]} />
-                    <Text style={styles.moodLabel} allowFontScaling={false}>{cat.label}</Text>
-                    <Ionicons name="chevron-forward" size={12} color={cat.accent} />
-                  </Pressable>
+                  <MoodCard
+                    key={cat.id}
+                    cat={cat}
+                    onPress={() => {
+                      navigation.navigate('Search', { query: cat.query });
+                    }}
+                  />
                 ))}
               </View>
             </View>
@@ -1334,12 +1368,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 8,
   },
   moodCard: {
-    width: (W - 48) / 2, borderRadius: Radius.md, padding: Spacing.base,
+    width: (W - 48) / 2, borderRadius: Radius.md,
+    paddingLeft: 14, paddingRight: 10, paddingVertical: 14,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
     borderWidth: 1, borderColor: Colors.glass.border, overflow: 'hidden',
   },
   moodAccentBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
-  moodLabel: { fontSize: 13, fontFamily: Typography.fontSemiBold, color: Colors.text.primary, flex: 1, marginLeft: 8 },
+  moodLabel: { fontSize: 12.5, fontFamily: Typography.fontSemiBold, color: Colors.text.primary, flex: 1, marginLeft: 0 },
+  moodContentRow: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6 },
+  moodIcon: { marginLeft: 2 },
 });
 
 export default HomeScreen;

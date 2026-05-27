@@ -239,7 +239,7 @@ export const hapticUtils = {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
-      console.warn('Haptic feedback not available');
+      console.log('Haptic feedback not available');
     }
   },
   
@@ -248,7 +248,7 @@ export const hapticUtils = {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     } catch (error) {
-      console.warn('Haptic feedback not available');
+      console.log('Haptic feedback not available');
     }
   },
   
@@ -257,7 +257,7 @@ export const hapticUtils = {
     try {
       await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
     } catch (error) {
-      console.warn('Haptic feedback not available');
+      console.log('Haptic feedback not available');
     }
   },
   
@@ -266,7 +266,7 @@ export const hapticUtils = {
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
-      console.warn('Haptic feedback not available');
+      console.log('Haptic feedback not available');
     }
   },
   
@@ -275,7 +275,7 @@ export const hapticUtils = {
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
     } catch (error) {
-      console.warn('Haptic feedback not available');
+      console.log('Haptic feedback not available');
     }
   },
   
@@ -284,7 +284,7 @@ export const hapticUtils = {
     try {
       await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } catch (error) {
-      console.warn('Haptic feedback not available');
+      console.log('Haptic feedback not available');
     }
   },
 } as const;

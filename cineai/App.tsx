@@ -5,7 +5,11 @@ import { View, Text, StyleSheet, LogBox } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 
-LogBox.ignoreLogs(['TMDB request failed or is blocked']);
+LogBox.ignoreLogs([
+  'TMDB request failed or is blocked',
+  '[expo-av]: Expo AV has been deprecated',
+]);
+LogBox.ignoreAllLogs(true);
 import {
   useFonts,
   Inter_400Regular,

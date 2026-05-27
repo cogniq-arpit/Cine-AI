@@ -146,7 +146,7 @@ export const MovieDetailsScreen: React.FC = () => {
           setCert(c);
           if (d.imdb_id) {
             movieService.logInteraction(d.imdb_id, 'click').catch(err => {
-              console.warn('Failed to log movie click interaction:', err);
+              console.log('Failed to log movie click interaction:', err);
             });
           }
         }
@@ -169,7 +169,7 @@ export const MovieDetailsScreen: React.FC = () => {
         message: `Check out "${movie.title}" on CineAI! ${movie.tagline || ''}`,
       });
     } catch (e) {
-      console.warn(e);
+      console.log(e);
     }
   };
 

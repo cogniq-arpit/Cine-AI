@@ -1,7 +1,7 @@
 /**
  * CineAI V3 — SearchScreen
  */
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, FlatList, Pressable,
   TextInput, Dimensions, ActivityIndicator, StatusBar,
@@ -13,11 +13,11 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors, Radius, Motion, Spacing } from '../../constants/theme';
 import tmdbApi from '../../services/tmdbApi';
-import type { Movie, RootStackParamList } from '../../types';
+import type { Movie, RootStackParamList, MainTabParamList } from '../../types';
 
 const { width: W } = Dimensions.get('window');
 type SearchNav = NativeStackNavigationProp<RootStackParamList>;
@@ -76,6 +76,7 @@ const cardSt = StyleSheet.create({
 export const SearchScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<SearchNav>();
+  const route = useRoute<RouteProp<MainTabParamList, 'Search'>>();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<Movie[]>([]);
   const [loading, setLoading] = useState(false);
@@ -116,6 +117,13 @@ export const SearchScreen: React.FC = () => {
       finally { setLoading(false); }
     }, 400);
   }, []);
+
+  useEffect(() => {
+    if (route.params?.query) {
+      handleSearch(route.params.query);
+      navigation.setParams({ query: undefined } as any);
+    }
+  }, [route.params?.query, handleSearch, navigation]);
 
   return (
     <View style={[st.root, { paddingTop: insets.top }]}>

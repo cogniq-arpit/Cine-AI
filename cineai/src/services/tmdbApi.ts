@@ -586,7 +586,7 @@ export const tmdbApi = {
         return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
     } catch (e) {
-      console.warn('Backend trending fetch failed. Falling back to local curated cache.', e);
+      console.log('Backend trending fetch failed. Falling back to local curated cache.', e);
     }
     const trending = CURATED_DB.slice(0, 10).map(mapTmdbToMovie);
     return createPaginatedResponse(trending);
@@ -600,7 +600,7 @@ export const tmdbApi = {
         return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
     } catch (e) {
-      console.warn('Backend popular fetch failed. Falling back to local curated cache.', e);
+      console.log('Backend popular fetch failed. Falling back to local curated cache.', e);
     }
     const popular = CURATED_DB.slice(2, 12).map(mapTmdbToMovie);
     return createPaginatedResponse(popular);
@@ -614,7 +614,7 @@ export const tmdbApi = {
         return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
     } catch (e) {
-      console.warn('Backend top_rated fetch failed. Falling back to local curated cache.', e);
+      console.log('Backend top_rated fetch failed. Falling back to local curated cache.', e);
     }
     const topRated = [...CURATED_DB]
       .sort((a, b) => parseFloat(b.imdbRating) - parseFloat(a.imdbRating))
@@ -636,7 +636,7 @@ export const tmdbApi = {
         return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
     } catch (e) {
-      console.warn('Backend upcoming fetch failed. Falling back to local curated cache.', e);
+      console.log('Backend upcoming fetch failed. Falling back to local curated cache.', e);
     }
     const upcoming = CURATED_DB.slice(6, 12).map(mapTmdbToMovie);
     return createPaginatedResponse(upcoming);
@@ -656,7 +656,7 @@ export const tmdbApi = {
       const { data } = await apiClient.get<any>(`/movies/details/${imdbId}`);
       return mapTmdbToMovieDetails(data);
     } catch (error) {
-      console.warn(`Backend details lookup failed for ${imdbId}. Serving custom fallback.`, error);
+      console.log(`Backend details lookup failed for ${imdbId}. Serving custom fallback.`, error);
       const fallbackCurated = CURATED_DB[0];
       return mapTmdbToMovieDetails({
         ...fallbackCurated,
@@ -685,9 +685,12 @@ export const tmdbApi = {
         return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
     } catch (error) {
-      console.warn('Backend search query failed. Serving filtered offline database.', error);
+      console.log('Backend search query failed. Serving filtered offline database.', error);
     }
-    const filtered = CURATED_DB.filter(m => m.Title.toLowerCase().includes(query.toLowerCase())).map(mapTmdbToMovie);
+    const filtered = CURATED_DB.filter(m => 
+      m.Title.toLowerCase().includes(query.toLowerCase()) || 
+      m.Genre.toLowerCase().includes(query.toLowerCase())
+    ).map(mapTmdbToMovie);
     return createPaginatedResponse(filtered);
   },
 
