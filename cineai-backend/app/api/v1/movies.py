@@ -22,11 +22,11 @@ import logging
 logger = logging.getLogger("cineai-movies-router")
 
 @router.get("/trending", response_model=List[dict])
-async def get_trending_movies(db: AsyncSession = Depends(get_db)):
+async def get_trending_movies(limit: int = 10, db: AsyncSession = Depends(get_db)):
     """Resolves trending movies dynamically by consolidating highest global interaction rates or querying TMDB directly."""
     try:
         # 1. Try to fetch live trending movies from TMDB
-        trending = await movie_metadata_service.fetch_trending_movies()
+        trending = await movie_metadata_service.fetch_trending_movies(limit=limit)
         if trending:
             return trending
     except Exception as e:
@@ -77,10 +77,10 @@ async def get_trending_movies(db: AsyncSession = Depends(get_db)):
         return fallback
 
 @router.get("/popular", response_model=List[dict])
-async def get_popular_movies():
+async def get_popular_movies(limit: int = 10):
     """Fetches popular movies dynamically from TMDB."""
     try:
-        popular = await movie_metadata_service.fetch_popular_movies()
+        popular = await movie_metadata_service.fetch_popular_movies(limit=limit)
         if popular:
             return popular
     except Exception as e:
@@ -88,10 +88,10 @@ async def get_popular_movies():
     return []
 
 @router.get("/upcoming", response_model=List[dict])
-async def get_upcoming_movies():
+async def get_upcoming_movies(limit: int = 10):
     """Fetches upcoming movies dynamically from TMDB."""
     try:
-        upcoming = await movie_metadata_service.fetch_upcoming_movies()
+        upcoming = await movie_metadata_service.fetch_upcoming_movies(limit=limit)
         if upcoming:
             return upcoming
     except Exception as e:
@@ -99,10 +99,10 @@ async def get_upcoming_movies():
     return []
 
 @router.get("/top_rated", response_model=List[dict])
-async def get_top_rated_movies():
+async def get_top_rated_movies(limit: int = 10):
     """Fetches top-rated movies dynamically from TMDB."""
     try:
-        top_rated = await movie_metadata_service.fetch_top_rated_movies()
+        top_rated = await movie_metadata_service.fetch_top_rated_movies(limit=limit)
         if top_rated:
             return top_rated
     except Exception as e:
@@ -138,9 +138,41 @@ async def get_movie_details(imdb_id: str, current_user: Optional[User] = Depends
     return details
 
 @router.get("/search", response_model=List[dict])
-async def search_movies(query: str):
+async def search_movies(query: str, limit: int = 6):
     """Searches movies securely via consolidated backend TMDB service."""
-    results = await movie_metadata_service.search_movies(query)
+    results = await movie_metadata_service.search_movies(query, limit=limit)
+    return results
+
+@router.get("/discover", response_model=List[dict])
+async def discover_movies(
+    with_genres: Optional[str] = None,
+    sort_by: Optional[str] = "popularity.desc",
+    vote_average_gte: Optional[float] = None,
+    vote_count_gte: Optional[int] = None,
+    with_original_language: Optional[str] = None,
+    primary_release_year: Optional[int] = None,
+    page: Optional[int] = 1,
+    limit: Optional[int] = 20
+):
+    """Proxies the standard TMDB discover endpoint for custom advanced query combinations."""
+    params = {
+        "page": page,
+        "limit": limit
+    }
+    if with_genres:
+        params["with_genres"] = with_genres
+    if sort_by:
+        params["sort_by"] = sort_by
+    if vote_average_gte:
+        params["vote_average.gte"] = vote_average_gte
+    if vote_count_gte:
+        params["vote_count.gte"] = vote_count_gte
+    if with_original_language:
+        params["with_original_language"] = with_original_language
+    if primary_release_year:
+        params["primary_release_year"] = primary_release_year
+        
+    results = await movie_metadata_service.discover_movies(params)
     return results
 
 @router.post("/watchlist/toggle", status_code=status.HTTP_200_OK)

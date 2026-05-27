@@ -25,16 +25,19 @@ export const numberToImdbId = (num: number): string => {
 
 export const getPosterUrl = (path: string | null): string => {
   if (!path || path === 'N/A') return FALLBACK_POSTER;
+  if (path.startsWith('/')) return `https://image.tmdb.org/t/p/w500${path}`;
   return path;
 };
 
 export const getBackdropUrl = (path: string | null): string => {
   if (!path || path === 'N/A') return FALLBACK_BACKDROP;
+  if (path.startsWith('/')) return `https://image.tmdb.org/t/p/w1280${path}`;
   return path;
 };
 
 export const getProfileUrl = (path: string | null): string => {
   if (!path || path === 'N/A') return FALLBACK_PROFILE;
+  if (path.startsWith('/')) return `https://image.tmdb.org/t/p/w185${path}`;
   return path;
 };
 
@@ -439,23 +442,28 @@ const getLocalRecommendations = (target: MovieDetails, count = 10): Movie[] => {
 // ─── Direct Mapping Functions ──────────────────────────────────────────────
 export const mapTmdbToMovie = (movieData: any): Movie => {
   const id = imdbIdToNumber(movieData.imdbID);
-  const rating = parseFloat(movieData.imdbRating || '7.5');
-  const votes = parseInt((movieData.imdbVotes || '10,000').replace(/[^0-9]/g, ''), 10) || 10000;
-  const genreIds = getGenreIdsFromString(movieData.Genre || '');
+  
+  const poster = getPosterUrl(movieData.poster_path || movieData.Poster);
+  const backdrop = getBackdropUrl(movieData.backdrop_path || movieData.Poster);
+  const lang = movieData.original_language || 'en';
+  const rating = movieData.vote_average !== undefined ? movieData.vote_average : parseFloat(movieData.imdbRating || '7.5');
+  const votes = movieData.vote_count !== undefined ? movieData.vote_count : (parseInt((movieData.imdbVotes || '10,000').replace(/[^0-9]/g, ''), 10) || 10000);
+  const genreIds = movieData.genre_ids && movieData.genre_ids.length > 0 ? movieData.genre_ids : getGenreIdsFromString(movieData.Genre || '');
+  const releaseDate = movieData.release_date || parseTmdbDate(movieData.Released, movieData.Year);
 
   return {
     id,
     title: movieData.Title || '',
     original_title: movieData.Title || '',
     overview: movieData.Plot || 'No plot overview available.',
-    poster_path: getPosterUrl(movieData.Poster),
-    backdrop_path: getBackdropUrl(movieData.Poster),
-    release_date: parseTmdbDate(movieData.Released, movieData.Year),
+    poster_path: poster,
+    backdrop_path: backdrop,
+    release_date: releaseDate,
     vote_average: rating,
     vote_count: votes,
     popularity: rating * (votes / 50000),
     genre_ids: genreIds,
-    original_language: 'en',
+    original_language: lang,
     adult: false,
     video: false,
   };
@@ -463,9 +471,9 @@ export const mapTmdbToMovie = (movieData: any): Movie => {
 
 export const mapTmdbToMovieDetails = (movieData: any): MovieDetails => {
   const movie = mapTmdbToMovie(movieData);
-  const runtimeMin = parseInt((movieData.Runtime || '120 min').replace(/[^0-9]/g, ''), 10) || 120;
-  const genresList = getGenresListFromString(movieData.Genre || '');
-  const revenueVal = parseInt((movieData.BoxOffice || '$0').replace(/[^0-9]/g, ''), 10) || 0;
+  const runtimeMin = movieData.runtime || parseInt((movieData.Runtime || '120 min').replace(/[^0-9]/g, ''), 10) || 120;
+  const genresList = movieData.genres || getGenresListFromString(movieData.Genre || '');
+  const revenueVal = movieData.revenue || parseInt((movieData.BoxOffice || '$0').replace(/[^0-9]/g, ''), 10) || 0;
 
   // Split actors
   const castList: CastMember[] = (movieData.Actors || 'N/A')
@@ -528,8 +536,8 @@ export const mapTmdbToMovieDetails = (movieData: any): MovieDetails => {
       cast: castList,
       crew: crewList,
     },
-    // Safe placeholder for trailer video
-    videos: {
+    // Use authentic videos list if available from backend, otherwise fall back to dummy/search query structure
+    videos: movieData.videos && movieData.videos.results ? movieData.videos : {
       results: [
         {
           id: '1',
@@ -579,9 +587,9 @@ export const CURATED_MOVIES: Movie[] = CURATED_DB.map(mapTmdbToMovie);
 // ─── Main TMDB API exports delegating to asynchronous backend ───────────────
 export const tmdbApi = {
   // Trending Movies
-  getTrending: async (timeWindow: 'day' | 'week' = 'week'): Promise<PaginatedResponse<Movie>> => {
+  getTrending: async (timeWindow: 'day' | 'week' = 'week', limit = 35): Promise<PaginatedResponse<Movie>> => {
     try {
-      const { data } = await apiClient.get<any[]>('/movies/trending');
+      const { data } = await apiClient.get<any[]>('/movies/trending', { params: { limit } });
       if (data && data.length > 0) {
         return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
@@ -593,9 +601,9 @@ export const tmdbApi = {
   },
 
   // Popular Movies
-  getPopular: async (page = 1): Promise<PaginatedResponse<Movie>> => {
+  getPopular: async (page = 1, limit = 35): Promise<PaginatedResponse<Movie>> => {
     try {
-      const { data } = await apiClient.get<any[]>('/movies/popular');
+      const { data } = await apiClient.get<any[]>('/movies/popular', { params: { limit } });
       if (data && data.length > 0) {
         return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
@@ -607,9 +615,9 @@ export const tmdbApi = {
   },
 
   // Top Rated Movies
-  getTopRated: async (page = 1): Promise<PaginatedResponse<Movie>> => {
+  getTopRated: async (page = 1, limit = 35): Promise<PaginatedResponse<Movie>> => {
     try {
-      const { data } = await apiClient.get<any[]>('/movies/top_rated');
+      const { data } = await apiClient.get<any[]>('/movies/top_rated', { params: { limit } });
       if (data && data.length > 0) {
         return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
@@ -629,9 +637,9 @@ export const tmdbApi = {
   },
 
   // Upcoming Movies
-  getUpcoming: async (page = 1): Promise<PaginatedResponse<Movie>> => {
+  getUpcoming: async (page = 1, limit = 35): Promise<PaginatedResponse<Movie>> => {
     try {
-      const { data } = await apiClient.get<any[]>('/movies/upcoming');
+      const { data } = await apiClient.get<any[]>('/movies/upcoming', { params: { limit } });
       if (data && data.length > 0) {
         return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
@@ -678,9 +686,9 @@ export const tmdbApi = {
   },
 
   // Movie Search by query
-  searchMovies: async (query: string, page = 1): Promise<PaginatedResponse<Movie>> => {
+  searchMovies: async (query: string, page = 1, limit = 35): Promise<PaginatedResponse<Movie>> => {
     try {
-      const { data } = await apiClient.get<any[]>('/movies/search', { params: { query } });
+      const { data } = await apiClient.get<any[]>('/movies/search', { params: { query, limit } });
       if (data && data.length > 0) {
         return createPaginatedResponse(data.map(mapTmdbToMovie));
       }
@@ -714,7 +722,28 @@ export const tmdbApi = {
     year?: number;
     page?: number;
     primary_release_year?: number;
+    limit?: number;
   }): Promise<PaginatedResponse<Movie>> => {
+    try {
+      const queryParams: any = {
+        with_genres: params.with_genres,
+        sort_by: params.sort_by,
+        vote_average_gte: params['vote_average.gte'],
+        vote_count_gte: params['vote_count.gte'],
+        with_original_language: params.with_original_language,
+        primary_release_year: params.year || params.primary_release_year,
+        page: params.page || 1,
+        limit: params.limit || 35,
+      };
+      
+      const { data } = await apiClient.get<any[]>('/movies/discover', { params: queryParams });
+      if (data && data.length > 0) {
+        return createPaginatedResponse(data.map(mapTmdbToMovie));
+      }
+    } catch (e) {
+      console.log('Backend discover query failed. Falling back to local filters.', e);
+    }
+
     let list = CURATED_DB;
 
     if (params.with_genres) {

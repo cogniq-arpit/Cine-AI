@@ -69,10 +69,11 @@ class AIService:
             "Rules:\n"
             "1. movieSearchQueries must contain real film titles suitable for TMDB search.\n"
             "2. For director or actor prompts, recommend movies strongly connected to that person.\n"
-            "3. For greetings or non-recommendation chatter, use empty arrays for movieSearchQueries and moodTags.\n"
-            "4. Do not wrap JSON in markdown fences.\n"
-            "5. Do not invent platform availability or ratings.\n"
-            "6. If you cannot satisfy the exact request, explain briefly in message and return the closest valid titles."
+            "3. Ensure high diversity in your recommendations: avoid falling into a loop of repeating the same mainstream modern blockbusters (such as Oppenheimer, Dune, Interstellar, Inception). Actively balance recommendations with classic cinema, international gems, and indie masterpieces.\n"
+            "4. For greetings or non-recommendation chatter, use empty arrays for movieSearchQueries and moodTags.\n"
+            "5. Do not wrap JSON in markdown fences.\n"
+            "6. Do not invent platform availability or ratings.\n"
+            "7. If you cannot satisfy the exact request, explain briefly in message and return the closest valid titles."
         )
 
     def _format_context(self, chat_context: List[Dict] | None) -> List[Dict]:

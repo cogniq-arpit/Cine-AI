@@ -1,1382 +1,1618 @@
-/**
- * CineAI V3 — HomeScreen (Premium Infinite Content Feed Edition)
- * A luxury-tier entertainment discovery experience combining design details
- * from Netflix, Disney+, Spotify, Apple TV+, and Letterboxd.
- */
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, Pressable, FlatList,
-  Dimensions, ActivityIndicator, StatusBar, RefreshControl, Platform
+  ActivityIndicator,
+  Dimensions,
+  FlatList,
+  Linking,
+  Pressable,
+  RefreshControl,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  View,
 } from 'react-native';
-import Animated, {
-  useSharedValue, useAnimatedStyle, withTiming, withSpring, interpolate,
-  useAnimatedScrollHandler, Extrapolate, withRepeat, withSequence
-} from 'react-native-reanimated';
-import { LinearGradient } from 'expo-linear-gradient';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Image } from 'expo-image';
+import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { Colors, Radius, Motion, Typography, Spacing } from '../../constants/theme';
-import { useAuthStore } from '../../store/authStore';
+import { Colors, Radius, Spacing, Typography } from '../../constants/theme';
 import type { Movie } from '../../types';
-import { tmdbApi } from '../../services/tmdbApi';
+import { useAuthStore } from '../../store/authStore';
+import { useWatchlistStore } from '../../store/watchlistStore';
+import { useBackendStatusStore } from '../../store/backendStatusStore';
+import { apiClient } from '../../services/api/apiClient';
+import { chatService } from '../../services/api/chatService';
+import { mapTmdbToMovie, numberToImdbId, tmdbApi } from '../../services/tmdbApi';
 
-const { width: W, height: H } = Dimensions.get('window');
-const HERO_HEIGHT = H * 0.62;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
+const HERO_HEIGHT = Math.max(420, Math.floor(SCREEN_HEIGHT * 0.58));
+const RAIL_CARD_WIDTH = 132;
+const RAIL_CARD_HEIGHT = 198;
+const CACHE_TTL_MS = 10 * 60 * 1000;
+const CONTINUE_WATCHING_KEY = '@cineai_continue_history_v1';
 
-// ─── Direct Curated Movie Dataset for Zero-Boot Latency ──────────────────────
-const CURATED: Movie[] = [
-  {
-    id: 15398776,
-    title: 'Oppenheimer',
-    original_title: 'Oppenheimer',
-    overview: 'The story of J. Robert Oppenheimer and his role in the development of the atomic bomb during World War II.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/8Gxv2Z7Hjsug4ZgCH5z25nuREQz.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/8Gxv8gSFCU0XGDykEGv7zR1n2ua.jpg',
-    release_date: '2023-07-21',
-    vote_average: 8.9,
-    vote_count: 715321,
-    popularity: 127.5,
-    genre_ids: [36, 18],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 15239678,
-    title: 'Dune: Part Two',
-    original_title: 'Dune: Part Two',
-    overview: 'Paul Atreides unites with Chani and the Fremen while seeking revenge against the Harks.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/1pdfpwXt6tLY244TLHjRj24Zt6t.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/1pdfLvkbY9ohJlCjQH2CZjjYVvJ.jpg',
-    release_date: '2024-03-01',
-    vote_average: 9.0,
-    vote_count: 430225,
-    popularity: 98.4,
-    genre_ids: [12, 878],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 816692,
-    title: 'Interstellar',
-    original_title: 'Interstellar',
-    overview: 'A team of explorers travel through a wormhole in space in an attempt to ensure humanity\'s survival.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg',
-    release_date: '2014-11-07',
-    vote_average: 8.7,
-    vote_count: 2014562,
-    popularity: 89.3,
-    genre_ids: [12, 18, 878],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 1375666,
-    title: 'Inception',
-    original_title: 'Inception',
-    overview: 'A thief who steals corporate secrets through dream-sharing technology is given the inverse task of planting an idea.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/ljsQgJm4w4R02oL3t78z770a2FG.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/edv5CZvWj09upOsy2Y6IwDhK8bt.jpg',
-    release_date: '2010-07-16',
-    vote_average: 8.8,
-    vote_count: 2514682,
-    popularity: 95.1,
-    genre_ids: [28, 12, 878],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 468569,
-    title: 'The Dark Knight',
-    original_title: 'The Dark Knight',
-    overview: 'Batman must accept his greatest psychological tests against the chaos-loving Joker.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/qJ2tWw7512l29i1KjGo8qG71wCc.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/1hRoyzDtpgMU7Dz4JF22RANzQO7.jpg',
-    release_date: '2008-07-18',
-    vote_average: 9.0,
-    vote_count: 2891421,
-    popularity: 112.8,
-    genre_ids: [28, 80, 18],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 6751668,
-    title: 'Parasite',
-    original_title: 'Parasite',
-    overview: 'Greed and class discrimination threaten the relationship between the Park and Kim families.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/7omwqh3n7zVpt6N7nZ0BwQv8m2t.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/od22ftNnyag0TTxcnJhlsu3aLoU.jpg',
-    release_date: '2019-05-30',
-    vote_average: 8.5,
-    vote_count: 912410,
-    popularity: 73.2,
-    genre_ids: [18, 53],
-    original_language: 'ko',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 110912,
-    title: 'Pulp Fiction',
-    original_title: 'Pulp Fiction',
-    overview: 'The lives of mob hitmen, a boxer, and a gangster\'s wife intertwine in tales of violence.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/suaEOtk1N1sgg2MTM7oZd2cfVp3.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/suaEOtk1N1sgg2MTM7oZd2cfVp3.jpg',
-    release_date: '1994-10-14',
-    vote_average: 8.9,
-    vote_count: 2185212,
-    popularity: 85.6,
-    genre_ids: [80, 18],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 111161,
-    title: 'The Shawshank Redemption',
-    original_title: 'The Shawshank Redemption',
-    overview: 'Over the course of several years, two convicts form a friendship, seeking consolation and redemption.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/kXfqcdQKsToO0OUXHcrrNCHDBzO.jpg',
-    release_date: '1994-10-14',
-    vote_average: 9.3,
-    vote_count: 2740000,
-    popularity: 92.4,
-    genre_ids: [18],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 9362722,
-    title: 'Spider-Man: Across the Spider-Verse',
-    original_title: 'Spider-Man: Across the Spider-Verse',
-    overview: 'Miles Morales catapults across the Multiverse, encountering a team of Spider-People protecting its existence.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/8Vt6mWEReuy4Of61Lnj5Xj704m8.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/8Vt6mWEReuy4Of61Lnj5Xj704m8.jpg',
-    release_date: '2023-06-02',
-    vote_average: 8.6,
-    vote_count: 360000,
-    popularity: 87.2,
-    genre_ids: [16, 28, 12],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 1517268,
-    title: 'Barbie',
-    original_title: 'Barbie',
-    overview: 'Barbie and Ken are having the time of their lives in perfect Barbie Land before entering the real world.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/iuFNMSmv2jzgj07HiZyDYBfOIeC.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/iuFNMSmv2jzgj07HiZyDYBfOIeC.jpg',
-    release_date: '2023-07-21',
-    vote_average: 6.9,
-    vote_count: 510000,
-    popularity: 76.5,
-    genre_ids: [12, 35, 14],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 3783958,
-    title: 'La La Land',
-    original_title: 'La La Land',
-    overview: 'A jazz pianist and an actress fall in love while navigating their aspirations in Los Angeles.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/6v4g6yW01uTmbxqwg75iEkMkrNP.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/6v4g6yW01uTmbxqwg75iEkMkrNP.jpg',
-    release_date: '2016-12-09',
-    vote_average: 8.0,
-    vote_count: 650000,
-    popularity: 58.7,
-    genre_ids: [35, 18, 10402],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 1856101,
-    title: 'Blade Runner 2049',
-    original_title: 'Blade Runner 2049',
-    overview: 'LAPD Officer K uncovers a long-buried secret that has the potential to plunge society into chaos.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/r4FGhQIrB7pOvHTkl8PZB6FYSdK.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/gIZ1QniE6E77NI6lCU6MxlNBvIx.jpg',
-    release_date: '2017-10-06',
-    vote_average: 8.0,
-    vote_count: 640000,
-    popularity: 63.1,
-    genre_ids: [28, 18, 878],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 1130884,
-    title: 'Shutter Island',
-    original_title: 'Shutter Island',
-    overview: 'US Marshals Teddy and Chuck investigate the mysterious disappearance of a patient on a remote island.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/4ryC88GMwAaGsj181z1Ty8K0j7q.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/2nqsOT2AqPkTW81bWaLRtjgjqVM.jpg',
-    release_date: '2010-02-19',
-    vote_average: 8.2,
-    vote_count: 1450000,
-    popularity: 69.8,
-    genre_ids: [9648, 53],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 137523,
-    title: 'Fight Club',
-    original_title: 'Fight Club',
-    overview: 'An insomniac office worker and a devil-may-care soap maker form an underground fight club.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/pB8BM7pdSp6B6Ih7QZ4DrQ3PmJK.jpg',
-    release_date: '1999-10-15',
-    vote_average: 8.8,
-    vote_count: 2214500,
-    popularity: 88.5,
-    genre_ids: [18],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 4154900,
-    title: 'Avengers: Endgame',
-    original_title: 'Avengers: Endgame',
-    overview: 'The remaining Avengers assemble once more to reverse Thanos\' actions and restore balance.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/ulzhLuWrPK07P1YkdWQLZnQh1JL.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/ulzhLuWrPK07P1YkdWQLZnQh1JL.jpg',
-    release_date: '2019-04-26',
-    vote_average: 8.4,
-    vote_count: 1240000,
-    popularity: 91.3,
-    genre_ids: [28, 12, 878],
-    original_language: 'en',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 245429,
-    title: 'Spirited Away',
-    original_title: 'Spirited Away',
-    overview: 'A young girl wanders into a world ruled by gods, witches, and spirits, where humans are changed into beasts.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/39q6a5rSFvyuiui7U72RTAu911Z.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/39q6a5rSFvyuiui7U72RTAu911Z.jpg',
-    release_date: '2001-07-20',
-    vote_average: 8.5,
-    vote_count: 15400,
-    popularity: 94.2,
-    genre_ids: [16, 14, 10751],
-    original_language: 'ja',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 11614188,
-    title: 'RRR',
-    original_title: 'RRR',
-    overview: 'A fictional history of two legendary revolutionaries and their journey away from home before they began fighting.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/wJrOmW2jIKG1t683LJZ7V48Y4Ux.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/wJrOmW2jIKG1t683LJZ7V48Y4Ux.jpg',
-    release_date: '2022-03-24',
-    vote_average: 7.9,
-    vote_count: 1450,
-    popularity: 45.2,
-    genre_ids: [28, 12, 18],
-    original_language: 'te',
-    adult: false,
-    video: false,
-  },
-  {
-    id: 1187043,
-    title: '3 Idiots',
-    original_title: '3 Idiots',
-    overview: 'Two friends search for their long lost companion, revisiting college memories and learning lessons.',
-    poster_path: 'https://image.tmdb.org/t/p/w500/668bMKsl921s766jY0aF27xOa4v.jpg',
-    backdrop_path: 'https://image.tmdb.org/t/p/w1280/668bMKsl921s766jY0aF27xOa4v.jpg',
-    release_date: '2009-12-25',
-    vote_average: 8.0,
-    vote_count: 3600,
-    popularity: 38.6,
-    genre_ids: [35, 18],
-    original_language: 'hi',
-    adult: false,
-    video: false,
-  },
-];;
+interface RawMoviePayload {
+  imdbID?: string;
+  Title?: string;
+  poster_path?: string;
+  backdrop_path?: string;
+  vote_average?: number;
+  vote_count?: number;
+  release_date?: string;
+  genre_ids?: number[];
+  original_language?: string;
+  [key: string]: unknown;
+}
 
-// Curated universes/brand tags with custom brand accents
-const STUDIO_HUBS = [
-  { id: 'marvel', label: 'MARVEL', icon: 'logo-github', glow: '#F0131E', desc: 'MCU Universe' },
-  { id: 'ghibli', label: 'GHIBLI', icon: 'leaf-outline', glow: '#4EC9F0', desc: 'Japanese Classics' },
-  { id: 'anime', label: 'CRUNCHY', icon: 'flame-outline', glow: '#FF9900', desc: 'Anime & Manga' },
-  { id: 'nolan', label: 'NOLAN', icon: 'planet-outline', glow: '#9B94FF', desc: 'Mind-Benders' },
-  { id: 'a24', label: 'A24', icon: 'sparkles-outline', glow: '#F7F7FA', desc: 'Indie Gems' }
+interface TrailerInfo {
+  key: string;
+  type: 'Trailer' | 'Teaser' | 'Clip';
+}
+
+interface ContinueWatchingEntry {
+  movie: Movie;
+  progress: number;
+  lastViewedAt: string;
+}
+
+interface MoodDefinition {
+  id: string;
+  label: string;
+  subtitle: string;
+  discoverParams: {
+    with_genres: string;
+    sort_by?: string;
+    with_original_language?: string;
+  };
+}
+
+interface PremiumRailDefinition {
+  id: string;
+  title: string;
+  subtitle: string;
+  mode: 'trending' | 'search' | 'discover';
+  searchQuery?: string;
+  discoverParams?: {
+    with_genres?: string;
+    sort_by?: string;
+    with_original_language?: string;
+    primary_release_year?: number;
+  };
+}
+
+interface PremiumRailState extends PremiumRailDefinition {
+  movies: Movie[];
+  loading: boolean;
+}
+
+interface HomeCachePayload {
+  timestamp: number;
+  heroMovies: Movie[];
+  aiRecommendations: Movie[];
+  moodRailById: Record<string, Movie[]>;
+  premiumRails: Array<{ id: string; movies: Movie[] }>;
+}
+
+interface RailCacheEntry {
+  expiresAt: number;
+  movies: Movie[];
+}
+
+interface TrailerCacheEntry {
+  expiresAt: number;
+  trailer: TrailerInfo | null;
+}
+
+const HOME_CACHE: { payload: HomeCachePayload | null } = { payload: null };
+const RAIL_CACHE = new Map<string, RailCacheEntry>();
+const TRAILER_CACHE = new Map<number, TrailerCacheEntry>();
+
+const MOOD_RAILS: MoodDefinition[] = [
+  {
+    id: 'dark-tense',
+    label: 'Dark & Tense',
+    subtitle: 'Atmospheric crime, suspense, and dread',
+    discoverParams: { with_genres: '53,80,27', sort_by: 'vote_average.desc' },
+  },
+  {
+    id: 'feel-good',
+    label: 'Feel Good',
+    subtitle: 'Uplifting, warm, and comfort-driven stories',
+    discoverParams: { with_genres: '35,10749,10751', sort_by: 'popularity.desc' },
+  },
+  {
+    id: 'mind-bending',
+    label: 'Mind-Bending',
+    subtitle: 'Twists, paradoxes, and cerebral sci-fi',
+    discoverParams: { with_genres: '878,9648,53', sort_by: 'vote_average.desc' },
+  },
+  {
+    id: 'epic-grand',
+    label: 'Epic & Grand',
+    subtitle: 'Scale, spectacle, and mythic journeys',
+    discoverParams: { with_genres: '12,14,28', sort_by: 'popularity.desc' },
+  },
+  {
+    id: 'emotional-drama',
+    label: 'Emotional Drama',
+    subtitle: 'Character-first stories with emotional weight',
+    discoverParams: { with_genres: '18,10749', sort_by: 'vote_average.desc' },
+  },
+  {
+    id: 'late-night-thrillers',
+    label: 'Late Night Thrillers',
+    subtitle: 'Fast-paced tension for after-hours viewing',
+    discoverParams: { with_genres: '53,9648', sort_by: 'popularity.desc' },
+  },
 ];
 
-const MOOD_CATEGORIES = [
-  { id: 'dark', label: 'Dark & Tense', color: '#1A121E', accent: Colors.accent.crimson, icon: 'skull-outline', query: 'Thriller' },
-  { id: 'feel', label: 'Feel Good', color: '#10221A', accent: Colors.semantic.success, icon: 'happy-outline', query: 'Comedy' },
-  { id: 'mind', label: 'Mind-Bending', color: '#12162E', accent: Colors.accent.electric, icon: 'planet-outline', query: 'Sci-Fi' },
-  { id: 'epic', label: 'Epic & Grand', color: '#251A10', accent: Colors.accent.gold, icon: 'trophy-outline', query: 'Adventure' },
+const PREMIUM_RAIL_DEFS: PremiumRailDefinition[] = [
+  {
+    id: 'trending-worldwide',
+    title: 'Trending Worldwide',
+    subtitle: 'The most discussed films right now',
+    mode: 'trending',
+  },
+  {
+    id: 'trending-india',
+    title: 'Trending in India',
+    subtitle: 'Regional momentum and crowd favorites',
+    mode: 'search',
+    searchQuery: 'India blockbuster trending movie',
+  },
+  {
+    id: 'hollywood-scifi',
+    title: 'Hollywood Sci-Fi',
+    subtitle: 'Large-scale futures and speculative worlds',
+    mode: 'discover',
+    discoverParams: { with_genres: '878,12', with_original_language: 'en', sort_by: 'popularity.desc' },
+  },
+  {
+    id: 'award-winners',
+    title: 'Award Winners',
+    subtitle: 'Celebrated films from global awards circuits',
+    mode: 'search',
+    searchQuery: 'Oscar award winning movies',
+  },
+  {
+    id: 'hidden-gems',
+    title: 'Hidden Gems',
+    subtitle: 'Highly rated films outside mainstream cycles',
+    mode: 'discover',
+    discoverParams: { sort_by: 'vote_average.desc' },
+  },
+  {
+    id: 'korean-cinema',
+    title: 'Korean Cinema',
+    subtitle: 'Sharp storytelling and genre precision',
+    mode: 'discover',
+    discoverParams: { with_original_language: 'ko', sort_by: 'popularity.desc' },
+  },
+  {
+    id: 'anime-essentials',
+    title: 'Anime Essentials',
+    subtitle: 'Foundational titles and modern standouts',
+    mode: 'discover',
+    discoverParams: { with_genres: '16', with_original_language: 'ja', sort_by: 'popularity.desc' },
+  },
+  {
+    id: 'bollywood-crime',
+    title: 'Bollywood Crime',
+    subtitle: 'High-stakes Hindi crime dramas and thrillers',
+    mode: 'search',
+    searchQuery: 'Bollywood crime thriller film',
+  },
+  {
+    id: 'south-indian-blockbusters',
+    title: 'South Indian Blockbusters',
+    subtitle: 'Event-level action and mass storytelling',
+    mode: 'search',
+    searchQuery: 'Telugu Tamil Malayalam action blockbuster',
+  },
+  {
+    id: 'psychological-thrillers',
+    title: 'Psychological Thrillers',
+    subtitle: 'Obsessive tension and psychological unease',
+    mode: 'discover',
+    discoverParams: { with_genres: '53,9648', sort_by: 'vote_average.desc' },
+  },
 ];
 
-// Mock watch history items for continue watching section
-const MOCK_CONTINUE_WATCHING = [
-  { movie: CURATED[0], progress: 0.72, timeLabel: '52m left' },
-  { movie: CURATED[1], progress: 0.35, timeLabel: '1h 48m left' },
-  { movie: CURATED[3], progress: 0.90, timeLabel: '14m left' },
-];
+const genreLabelMap: Record<number, string> = {
+  28: 'Action',
+  12: 'Adventure',
+  16: 'Animation',
+  35: 'Comedy',
+  80: 'Crime',
+  18: 'Drama',
+  9648: 'Mystery',
+  10749: 'Romance',
+  878: 'Sci-Fi',
+  27: 'Horror',
+  14: 'Fantasy',
+  53: 'Thriller',
+};
 
-// ─── Reusable High-Fidelity Components ─────────────────────────────────────
+const imageIsFromTmdb = (url: string | null | undefined): boolean => {
+  return typeof url === 'string' && url.includes('image.tmdb.org/t/p/');
+};
 
-// Section Header with glass controls
-const SectionHeader: React.FC<{ title: string; subtitle?: string; onSeeAll?: () => void }> = ({ title, subtitle, onSeeAll }) => (
-  <View style={secStyles.row}>
-    <View style={secStyles.left}>
-      <Text style={secStyles.title} allowFontScaling={false}>{title}</Text>
-      {subtitle && <Text style={secStyles.subtitle} allowFontScaling={false}>{subtitle}</Text>}
+const isQualityMovie = (movie: Movie): boolean => {
+  return (
+    imageIsFromTmdb(movie.poster_path) &&
+    imageIsFromTmdb(movie.backdrop_path) &&
+    movie.vote_count >= 120 &&
+    movie.vote_average >= 6.2
+  );
+};
+
+const sanitizeMovieList = (movies: Movie[]): Movie[] => {
+  const seen = new Set<number>();
+  return movies.filter(movie => {
+    if (!isQualityMovie(movie)) return false;
+    if (seen.has(movie.id)) return false;
+    seen.add(movie.id);
+    return true;
+  });
+};
+
+const rankMovie = (movie: Movie): number => {
+  const voteSignal = Math.log10(Math.max(1, movie.vote_count));
+  return movie.vote_average * 18 + voteSignal * 8 + Math.min(movie.popularity, 1000) * 0.015;
+};
+
+const rankMovies = (movies: Movie[]): Movie[] => {
+  return [...movies].sort((a, b) => rankMovie(b) - rankMovie(a));
+};
+
+const genreLine = (ids: number[] | undefined): string => {
+  if (!ids?.length) return 'Cinema';
+  return ids.map(id => genreLabelMap[id]).filter(Boolean).slice(0, 2).join(' • ') || 'Cinema';
+};
+
+const releaseYear = (date: string | undefined): string => {
+  if (!date || date.length < 4) return 'N/A';
+  return date.slice(0, 4);
+};
+
+const toMovies = (payload: RawMoviePayload[]): Movie[] => {
+  return payload
+    .map(item => {
+      try {
+        return mapTmdbToMovie(item);
+      } catch {
+        return null;
+      }
+    })
+    .filter((movie): movie is Movie => Boolean(movie));
+};
+
+const isYoutubeKey = (key: string): boolean => /^[a-zA-Z0-9_-]{10,15}$/.test(key);
+
+const selectTrailerFromVideos = (videos: any[]): TrailerInfo | null => {
+  if (!Array.isArray(videos) || videos.length === 0) return null;
+
+  const allowed = videos.filter(video => {
+    if (!video) return false;
+    if (video.official !== true) return false;
+    if (video.site !== 'YouTube') return false;
+    if (!['Trailer', 'Teaser', 'Clip'].includes(video.type)) return false;
+    if (!isYoutubeKey(String(video.key || ''))) return false;
+    return true;
+  });
+
+  const score = (type: string): number => {
+    if (type === 'Trailer') return 3;
+    if (type === 'Teaser') return 2;
+    if (type === 'Clip') return 1;
+    return 0;
+  };
+
+  const best = allowed.sort((a, b) => score(b.type) - score(a.type))[0];
+  if (!best) return null;
+
+  return {
+    key: String(best.key),
+    type: best.type,
+  };
+};
+
+const mergeByDiversity = (
+  raw: Movie[],
+  globalUsed: Set<number>,
+  nearbyBlocked: Set<number>,
+  desiredCount: number,
+): Movie[] => {
+  const ranked = rankMovies(sanitizeMovieList(raw));
+
+  const strict = ranked.filter(movie => !globalUsed.has(movie.id) && !nearbyBlocked.has(movie.id));
+  const strictSlice = strict.slice(0, desiredCount);
+  if (strictSlice.length >= desiredCount) {
+    strictSlice.forEach(movie => globalUsed.add(movie.id));
+    return strictSlice;
+  }
+
+  const relaxed = ranked.filter(movie => !nearbyBlocked.has(movie.id));
+  const merged: Movie[] = [...strictSlice];
+  const present = new Set(merged.map(movie => movie.id));
+
+  for (const movie of relaxed) {
+    if (merged.length >= desiredCount) break;
+    if (present.has(movie.id)) continue;
+    merged.push(movie);
+    present.add(movie.id);
+  }
+
+  merged.forEach(movie => globalUsed.add(movie.id));
+  return merged;
+};
+
+const setCacheRail = (key: string, movies: Movie[]): void => {
+  RAIL_CACHE.set(key, {
+    expiresAt: Date.now() + CACHE_TTL_MS,
+    movies,
+  });
+};
+
+const getCacheRail = (key: string): Movie[] | null => {
+  const entry = RAIL_CACHE.get(key);
+  if (!entry) return null;
+  if (entry.expiresAt < Date.now()) {
+    RAIL_CACHE.delete(key);
+    return null;
+  }
+  return entry.movies;
+};
+
+const SectionHeader: React.FC<{ title: string; subtitle?: string }> = ({ title, subtitle }) => {
+  return (
+    <View style={styles.sectionHeader}>
+      <Text style={styles.sectionTitle} allowFontScaling={false}>{title}</Text>
+      {subtitle ? <Text style={styles.sectionSubtitle} allowFontScaling={false}>{subtitle}</Text> : null}
     </View>
-    {onSeeAll && (
-      <Pressable onPress={onSeeAll} style={secStyles.seeAllBtn}>
-        <Text style={secStyles.seeAllText} allowFontScaling={false}>See all</Text>
-        <Ionicons name="chevron-forward" size={14} color={Colors.accent.crimson} />
-      </Pressable>
-    )}
-  </View>
-);
-
-const secStyles = StyleSheet.create({
-  row: { flexDirection: 'row', alignItems: 'flex-end', justifyContent: 'space-between', paddingHorizontal: 20, marginBottom: 14, marginTop: 8 },
-  left: { flex: 1 },
-  title: { fontSize: 20, fontFamily: Typography.fontPoppinsBold, color: Colors.text.primary, letterSpacing: -0.4 },
-  subtitle: { fontSize: 11, fontFamily: Typography.fontPrimary, color: Colors.text.secondary, marginTop: 1 },
-  seeAllBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, backgroundColor: Colors.glass.subtle, paddingHorizontal: 8, paddingVertical: 4, borderRadius: Radius.full, borderWidth: 1, borderColor: Colors.glass.border },
-  seeAllText: { fontSize: 11, fontFamily: Typography.fontMedium, color: Colors.accent.crimson },
-});
-
-// Premium Animated Poster Card
-const PosterCard: React.FC<{ movie: Movie; onPress: () => void; showRating?: boolean }> = ({ movie, onPress, showRating = true }) => {
-  const scale = useSharedValue(1);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
-  return (
-    <Animated.View style={[cardStyles.wrapper, style]}>
-      <Pressable
-        onPressIn={() => { scale.value = withSpring(0.96, Motion.springs.snappy); }}
-        onPressOut={() => { scale.value = withSpring(1, Motion.springs.bounce); }}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); onPress(); }}
-        style={cardStyles.pressable}
-      >
-        <Image
-          source={{ uri: movie.poster_path || undefined }}
-          style={cardStyles.poster}
-          contentFit="cover"
-          transition={300}
-          cachePolicy="memory-disk"
-        />
-        <LinearGradient
-          colors={['transparent', 'rgba(7,7,9,0.5)', 'rgba(7,7,9,0.92)']}
-          style={cardStyles.posterGradient}
-        />
-        <View style={cardStyles.posterMeta}>
-          <Text style={cardStyles.posterTitle} numberOfLines={2} allowFontScaling={false}>
-            {movie.title}
-          </Text>
-          {showRating && movie.vote_average > 0 && (
-            <View style={cardStyles.ratingRow}>
-              <Ionicons name="star" size={9} color={Colors.accent.gold} />
-              <Text style={cardStyles.ratingText} allowFontScaling={false}>
-                {movie.vote_average.toFixed(1)}
-              </Text>
-            </View>
-          )}
-        </View>
-      </Pressable>
-    </Animated.View>
   );
 };
 
-const cardStyles = StyleSheet.create({
-  wrapper: { marginRight: Spacing.sm },
-  pressable: { width: 124, borderRadius: Radius.md, overflow: 'hidden', backgroundColor: Colors.bg.surface, borderWidth: 1, borderColor: 'rgba(255,255,255,0.05)' },
-  poster: { width: 124, height: 180, borderRadius: Radius.md },
-  posterGradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 100 },
-  posterMeta: { position: 'absolute', bottom: 8, left: 8, right: 8 },
-  posterTitle: { fontSize: 11, fontFamily: Typography.fontSemiBold, color: Colors.text.primary, marginBottom: 3, textShadowColor: '#000', textShadowOffset: { width: 0, height: 1 }, textShadowRadius: 2 },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-  ratingText: { fontSize: 10, fontFamily: Typography.fontMedium, color: Colors.accent.gold },
-});
-
-// Netflix-style Rank Poster Card (Hollow Numeric Overlays)
-const RankingPosterCard: React.FC<{ movie: Movie; rank: number; onPress: () => void }> = ({ movie, rank, onPress }) => {
-  const scale = useSharedValue(1);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
-  return (
-    <Animated.View style={[rankStyles.wrapper, style]}>
-      <Pressable
-        onPressIn={() => { scale.value = withSpring(0.96, Motion.springs.snappy); }}
-        onPressOut={() => { scale.value = withSpring(1, Motion.springs.bounce); }}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); onPress(); }}
-        style={rankStyles.container}
-      >
-        {/* Giant Hollow Rank Digit placed behind/beside the card */}
-        <View style={rankStyles.digitWrapper}>
-          <Text style={rankStyles.digitText} allowFontScaling={false}>{rank}</Text>
-        </View>
-        
-        {/* Poster Card */}
-        <View style={rankStyles.card}>
-          <Image
-            source={{ uri: movie.poster_path || undefined }}
-            style={rankStyles.poster}
-            contentFit="cover"
-            transition={300}
-            cachePolicy="memory-disk"
-          />
-          <LinearGradient
-            colors={['transparent', 'rgba(7,7,9,0.85)']}
-            style={rankStyles.gradient}
-          />
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
-};
-
-const rankStyles = StyleSheet.create({
-  wrapper: { marginRight: 22 },
-  container: { width: 145, height: 180, flexDirection: 'row', alignItems: 'flex-end', position: 'relative' },
-  digitWrapper: { position: 'absolute', bottom: -22, left: -6, zIndex: 1 },
-  digitText: {
-    fontSize: 98,
-    fontFamily: Typography.fontPoppinsBold,
-    color: '#070709',
-    textShadowColor: Colors.glass.borderActive,
-    textShadowOffset: { width: 1, height: 1 },
-    textShadowRadius: 6,
-    letterSpacing: -6,
-    lineHeight: 110,
-    opacity: 0.92,
-  },
-  card: { width: 115, height: 172, borderRadius: Radius.md, overflow: 'hidden', marginLeft: 30, backgroundColor: Colors.bg.surface, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)' },
-  poster: { width: 115, height: 172 },
-  gradient: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 80 },
-});
-
-// Netflix-style Continue Watching Card
-const ContinueWatchingCard: React.FC<{ movie: Movie; progress: number; timeLabel: string; onPress: () => void }> = ({ movie, progress, timeLabel, onPress }) => {
-  const scale = useSharedValue(1);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
-  return (
-    <Animated.View style={[cwStyles.wrapper, style]}>
-      <Pressable
-        onPressIn={() => { scale.value = withSpring(0.96, Motion.springs.snappy); }}
-        onPressOut={() => { scale.value = withSpring(1, Motion.springs.bounce); }}
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); onPress(); }}
-        style={cwStyles.container}
-      >
-        <Image
-          source={{ uri: movie.backdrop_path || movie.poster_path || undefined }}
-          style={cwStyles.backdrop}
-          contentFit="cover"
-          cachePolicy="memory-disk"
-        />
-        <View style={StyleSheet.absoluteFillObject}>
-          <LinearGradient
-            colors={['rgba(7,7,9,0.1)', 'rgba(7,7,9,0.7)']}
-            style={StyleSheet.absoluteFillObject}
-          />
-        </View>
-        
-        {/* Central glowing play icon indicator */}
-        <View style={cwStyles.playCircle}>
-          <Ionicons name="play" size={14} color="#FFF" />
-        </View>
-
-        <View style={cwStyles.meta}>
-          <Text style={cwStyles.title} numberOfLines={1} allowFontScaling={false}>
-            {movie.title}
-          </Text>
-          <Text style={cwStyles.time} allowFontScaling={false}>
-            {timeLabel}
-          </Text>
-        </View>
-
-        {/* Dynamic Netflix progress slider bar */}
-        <View style={cwStyles.progressContainer}>
-          <View style={cwStyles.progressBarBg} />
-          <View style={[cwStyles.progressBarFill, { width: `${progress * 100}%` }]} />
-        </View>
-      </Pressable>
-    </Animated.View>
-  );
-};
-
-const cwStyles = StyleSheet.create({
-  wrapper: { marginRight: Spacing.sm },
-  container: { width: 190, height: 115, borderRadius: Radius.md, overflow: 'hidden', backgroundColor: Colors.bg.surface, borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)', justifyContent: 'flex-end' },
-  backdrop: { ...StyleSheet.absoluteFillObject },
-  playCircle: { position: 'absolute', top: '35%', left: '44%', width: 28, height: 28, borderRadius: 14, backgroundColor: 'rgba(230,57,70,0.85)', alignItems: 'center', justifyContent: 'center', shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.5, shadowRadius: 8 },
-  meta: { padding: Spacing.sm, zIndex: 2 },
-  title: { fontSize: 12, fontFamily: Typography.fontSemiBold, color: Colors.text.primary },
-  time: { fontSize: 10, fontFamily: Typography.fontPrimary, color: Colors.text.secondary, marginTop: 1 },
-  progressContainer: { height: 3, position: 'relative' },
-  progressBarBg: { ...StyleSheet.absoluteFillObject, backgroundColor: 'rgba(255,255,255,0.2)' },
-  progressBarFill: { position: 'absolute', left: 0, top: 0, bottom: 0, backgroundColor: Colors.accent.crimson, borderRadius: Radius.full },
-});
-
-// Ambient Glow Header Universe Selector (Studio Hubs)
-const StudioHubRow: React.FC<{ activeHub: string | null; onSelectHub: (id: string | null) => void }> = ({ activeHub, onSelectHub }) => {
-  return (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={hubStyles.container}
-    >
-      {STUDIO_HUBS.map(hub => {
-        const isActive = activeHub === hub.id;
-        return (
-          <Pressable
-            key={hub.id}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              onSelectHub(isActive ? null : hub.id);
-            }}
-            style={[
-              hubStyles.card,
-              isActive && { borderColor: hub.glow, backgroundColor: `${hub.glow}15` }
-            ]}
-          >
-            <Ionicons name={hub.icon as any} size={14} color={isActive ? hub.glow : Colors.text.secondary} />
-            <Text style={[hubStyles.label, isActive && { color: hub.glow }]} allowFontScaling={false}>
-              {hub.label}
-            </Text>
-            {isActive && (
-              <View style={[hubStyles.indicatorGlow, { backgroundColor: hub.glow }]} />
-            )}
-          </Pressable>
-        );
-      })}
-    </ScrollView>
-  );
-};
-
-const hubStyles = StyleSheet.create({
-  container: { paddingHorizontal: 20, gap: 10, paddingVertical: 12 },
-  card: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    paddingHorizontal: 12, paddingVertical: 8,
-    borderRadius: Radius.md, backgroundColor: Colors.bg.surface,
-    borderWidth: 1, borderColor: Colors.glass.border,
-    position: 'relative', overflow: 'hidden'
-  },
-  label: { fontSize: 11, fontFamily: Typography.fontPoppins, color: Colors.text.secondary, letterSpacing: 0.8 },
-  indicatorGlow: { position: 'absolute', bottom: 0, left: 12, right: 12, height: 2, borderTopLeftRadius: 1, borderTopRightRadius: 1 },
-});
-
-// Dynamic Autoplay-Indicator Hero Banner
-const HeroBannerV3: React.FC<{ movies: Movie[]; onPress: (id: number) => void }> = ({ movies, onPress }) => {
-  const [activeIdx, setActiveIdx] = useState(0);
-  const opacity = useSharedValue(1);
-  const scale = useSharedValue(1);
-  const sliderProgress = useSharedValue(0);
-
-  const heroStyle = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ scale: scale.value }],
-  }));
-
-  const progressStyle = useAnimatedStyle(() => ({
-    width: `${sliderProgress.value * 100}%`,
-  }));
-
-  useEffect(() => {
-    if (movies.length < 2) return;
-    
-    // Auto-fill indicator animation loop
-    sliderProgress.value = 0;
-    sliderProgress.value = withTiming(1, { duration: 6000 });
-
-    const timer = setInterval(() => {
-      opacity.value = withTiming(0, { duration: 400 });
-      scale.value = withTiming(0.96, { duration: 400 });
-      setTimeout(() => {
-        setActiveIdx(i => (i + 1) % Math.min(movies.length, 5));
-        opacity.value = withTiming(1, { duration: 500 });
-        scale.value = withTiming(1, { duration: 500 });
-        sliderProgress.value = 0;
-        sliderProgress.value = withTiming(1, { duration: 6000 });
-      }, 420);
-    }, 6000);
-    
-    return () => clearInterval(timer);
-  }, [movies.length, activeIdx]);
-
-  if (!movies.length) return <View style={{ height: HERO_HEIGHT, backgroundColor: Colors.bg.surface }} />;
-  const movie = movies[activeIdx];
-
-  return (
-    <Animated.View style={[heroStyles.container, heroStyle]}>
-      <Pressable
-        onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); onPress(movie.id); }}
-        style={StyleSheet.absoluteFillObject}
-      >
-        <Image
-          source={{ uri: movie.poster_path || undefined }}
-          style={StyleSheet.absoluteFillObject}
-          contentFit="cover"
-          transition={500}
-          cachePolicy="memory-disk"
-        />
-        
-        {/* Layered cinematic overlays */}
-        <LinearGradient
-          colors={['rgba(7,7,9,0.3)', 'rgba(7,7,9,0.5)', 'rgba(7,7,9,0.92)', Colors.bg.void]}
-          locations={[0, 0.25, 0.7, 1]}
-          style={StyleSheet.absoluteFillObject}
-        />
-
-        {/* Ambient Crimson/Electric glow effect behind hero texts */}
-        <View style={heroStyles.radialGlow} />
-
-        <View style={heroStyles.content}>
-          <View style={heroStyles.badgeRow}>
-            <View style={heroStyles.aiChip}>
-              <Ionicons name="sparkles" size={10} color={Colors.accent.crimson} />
-              <Text style={heroStyles.aiChipText} allowFontScaling={false}>AI Choice Tonight</Text>
-            </View>
-            <View style={heroStyles.matchChip}>
-              <Text style={heroStyles.matchChipText} allowFontScaling={false}>98% Match</Text>
-            </View>
-          </View>
-
-          <Text style={heroStyles.movieTitle} numberOfLines={2} allowFontScaling={false}>
-            {movie.title}
-          </Text>
-
-          {/* Genre Chips Overlays */}
-          <View style={heroStyles.genreRow}>
-            {movie.genre_ids?.slice(0, 3).map((gid, idx) => {
-              const genres: Record<number, string> = { 28: 'Action', 12: 'Adventure', 16: 'Anime', 35: 'Comedy', 80: 'Crime', 18: 'Drama', 878: 'Sci-Fi', 53: 'Thriller', 36: 'History' };
-              return (
-                <View key={idx} style={heroStyles.genreCap}>
-                  <Text style={heroStyles.genreCapText} allowFontScaling={false}>{genres[gid] || 'Cinema'}</Text>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Metadata Row */}
-          <View style={heroStyles.metaRow}>
-            {movie.release_date && (
-              <Text style={heroStyles.metaText} allowFontScaling={false}>
-                {new Date(movie.release_date).getFullYear()}
-              </Text>
-            )}
-            <View style={heroStyles.metaDot} />
-            <Ionicons name="star" size={11} color={Colors.accent.gold} />
-            <Text style={[heroStyles.metaText, { color: Colors.accent.gold }]} allowFontScaling={false}>
-              {movie.vote_average.toFixed(1)}
-            </Text>
-            <View style={heroStyles.metaDot} />
-            <Text style={heroStyles.metaText} allowFontScaling={false}>OLED 4K HDR</Text>
-          </View>
-
-          {/* Action CTAs */}
-          <View style={heroStyles.actions}>
-            <Pressable
-              style={heroStyles.playBtn}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {}); onPress(movie.id); }}
-            >
-              <Ionicons name="play" size={15} color={Colors.text.onAccent} />
-              <Text style={heroStyles.playText} allowFontScaling={false}>Resume Movie</Text>
-            </Pressable>
-            <Pressable
-              style={heroStyles.infoBtn}
-              onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); onPress(movie.id); }}
-            >
-              <Ionicons name="information-circle-outline" size={16} color={Colors.text.primary} />
-              <Text style={heroStyles.infoText} allowFontScaling={false}>Details</Text>
-            </Pressable>
-          </View>
-        </View>
-      </Pressable>
-
-      {/* Dynamic Slide Dots Indicators */}
-      <View style={heroStyles.dots}>
-        {movies.slice(0, 5).map((_, i) => (
-          <View key={i} style={[heroStyles.dot, i === activeIdx && heroStyles.dotActive]} />
-        ))}
-      </View>
-
-      {/* Autoplay loading indicator progress line */}
-      <View style={heroStyles.progressBarContainer}>
-        <Animated.View style={[heroStyles.progressBarFill, progressStyle]} />
-      </View>
-    </Animated.View>
-  );
-};
-
-const heroStyles = StyleSheet.create({
-  container: { height: HERO_HEIGHT, position: 'relative' },
-  radialGlow: {
-    position: 'absolute', bottom: 0, left: -100, width: W * 1.5, height: 350,
-    borderRadius: Radius.full, backgroundColor: 'rgba(230,57,70,0.06)',
-    filter: Platform.OS === 'ios' ? 'blur(80px)' : undefined, opacity: 0.7,
-  },
-  content: { position: 'absolute', bottom: 45, left: 20, right: 20 },
-  badgeRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
-  aiChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: `${Colors.accent.crimson}18`, borderRadius: Radius.full,
-    borderWidth: 1, borderColor: `${Colors.accent.crimson}30`,
-    paddingHorizontal: 9, paddingVertical: 3, alignSelf: 'flex-start',
-  },
-  aiChipText: { fontSize: 9, fontFamily: Typography.fontMedium, color: Colors.accent.crimson, letterSpacing: 0.5, textTransform: 'uppercase' },
-  matchChip: { backgroundColor: 'rgba(45,189,140,0.12)', borderWidth: 1, borderColor: 'rgba(45,189,140,0.3)', paddingHorizontal: 8, paddingVertical: 2, borderRadius: Radius.full },
-  matchChipText: { fontSize: 9, fontFamily: Typography.fontMedium, color: Colors.semantic.success },
-  movieTitle: {
-    fontSize: 34, fontFamily: Typography.fontPoppinsBold, color: Colors.text.primary,
-    lineHeight: 40, letterSpacing: -0.6, marginBottom: 8,
-  },
-  genreRow: { flexDirection: 'row', gap: 6, marginBottom: 12 },
-  genreCap: { backgroundColor: Colors.glass.medium, borderWidth: 1, borderColor: Colors.glass.border, borderRadius: Radius.full, paddingHorizontal: 9, paddingVertical: 3 },
-  genreCapText: { fontSize: 10, fontFamily: Typography.fontPrimary, color: Colors.text.secondary },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm, marginBottom: 20 },
-  metaText: { fontSize: 12, fontFamily: Typography.fontPrimary, color: Colors.text.secondary },
-  metaDot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: Colors.text.tertiary },
-  actions: { flexDirection: 'row', gap: 12 },
-  playBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.accent.crimson, borderRadius: Radius.md,
-    paddingHorizontal: 16, paddingVertical: 11,
-    shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.4, shadowRadius: 10, elevation: 4,
-  },
-  playText: { fontSize: 13, fontFamily: Typography.fontSemiBold, color: Colors.text.onAccent },
-  infoBtn: {
-    flexDirection: 'row', alignItems: 'center', gap: 6,
-    backgroundColor: Colors.glass.medium, borderRadius: Radius.md,
-    borderWidth: 1, borderColor: Colors.glass.border,
-    paddingHorizontal: 16, paddingVertical: 11,
-  },
-  infoText: { fontSize: 13, fontFamily: Typography.fontSemiBold, color: Colors.text.primary },
-  dots: { position: 'absolute', bottom: 18, right: 20, flexDirection: 'row', gap: 4 },
-  dot: { width: 4, height: 4, borderRadius: 2, backgroundColor: 'rgba(255,255,255,0.2)' },
-  dotActive: { width: 14, backgroundColor: Colors.accent.crimson },
-  progressBarContainer: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 2, backgroundColor: 'rgba(255,255,255,0.06)' },
-  progressBarFill: { height: '100%', backgroundColor: Colors.accent.crimson },
-});
-
-// Dynamic Shimmer Loader for content rows
 const RailSkeleton: React.FC = () => {
   return (
-    <View style={skeletonStyles.container}>
-      <View style={skeletonStyles.header} />
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={skeletonStyles.cards}>
-        {[1, 2, 3, 4].map(i => (
-          <View key={i} style={skeletonStyles.card} />
+    <View style={styles.railSkeletonWrap}>
+      <View style={styles.railSkeletonHeader} />
+      <View style={styles.railSkeletonRow}>
+        {[0, 1, 2, 3].map(index => (
+          <View key={`skeleton-${index}`} style={styles.railSkeletonCard} />
         ))}
-      </ScrollView>
+      </View>
     </View>
   );
 };
 
-// Reanimated spring-backed interactive Mood Card
-const MoodCard: React.FC<{
-  cat: { id: string; label: string; color: string; accent: string; icon: string; query: string };
-  onPress: () => void;
-}> = ({ cat, onPress }) => {
-  const scale = useSharedValue(1);
-  const style = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
+const PosterRailCard: React.FC<{
+  movie: Movie;
+  onPress: (movie: Movie) => void;
+}> = React.memo(({ movie, onPress }) => {
+  return (
+    <Pressable style={styles.posterCard} onPress={() => onPress(movie)}>
+      <Image
+        source={{ uri: movie.poster_path || undefined }}
+        style={styles.posterImage}
+        contentFit="cover"
+        transition={220}
+        cachePolicy="memory-disk"
+      />
+      <LinearGradient colors={['transparent', 'rgba(7,7,9,0.9)']} style={styles.posterGradient} />
+      <View style={styles.posterMeta}>
+        <Text style={styles.posterTitle} numberOfLines={1} allowFontScaling={false}>{movie.title}</Text>
+        <Text style={styles.posterSub} numberOfLines={1} allowFontScaling={false}>
+          {releaseYear(movie.release_date)} • {genreLine(movie.genre_ids)}
+        </Text>
+      </View>
+      <View style={styles.posterRatingPill}>
+        <Ionicons name="star" size={10} color={Colors.accent.gold} />
+        <Text style={styles.posterRatingText} allowFontScaling={false}>{movie.vote_average.toFixed(1)}</Text>
+      </View>
+    </Pressable>
+  );
+});
+
+const ContinueWatchingCard: React.FC<{
+  entry: ContinueWatchingEntry;
+  onPress: (movie: Movie) => void;
+}> = ({ entry, onPress }) => {
+  const progressPercent = Math.max(5, Math.min(95, Math.round(entry.progress * 100)));
 
   return (
-    <Animated.View style={style}>
-      <Pressable
-        onPressIn={() => { scale.value = withSpring(0.95, Motion.springs.snappy); }}
-        onPressOut={() => { scale.value = withSpring(1, Motion.springs.bounce); }}
-        onPress={() => {
-          Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-          onPress();
-        }}
-        style={[styles.moodCard, { backgroundColor: cat.color, borderColor: `${cat.accent}30` }]}
-        accessibilityRole="button"
-        accessibilityLabel={`Search movies matching mood ${cat.label}`}
-      >
-        <View style={[styles.moodAccentBar, { backgroundColor: cat.accent }]} />
-        <View style={styles.moodContentRow}>
-          <Ionicons name={cat.icon as any} size={15} color={cat.accent} style={styles.moodIcon} />
-          <Text style={styles.moodLabel} numberOfLines={1} adjustsFontSizeToFit={true} allowFontScaling={false}>{cat.label}</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={12} color={cat.accent} />
-      </Pressable>
-    </Animated.View>
+    <Pressable style={styles.continueCard} onPress={() => onPress(entry.movie)}>
+      <Image
+        source={{ uri: entry.movie.backdrop_path || undefined }}
+        style={styles.continueBackdrop}
+        contentFit="cover"
+        transition={200}
+        cachePolicy="memory-disk"
+      />
+      <LinearGradient colors={['transparent', 'rgba(7,7,9,0.92)']} style={styles.continueGradient} />
+      <View style={styles.continueMeta}>
+        <Text style={styles.continueTitle} numberOfLines={1} allowFontScaling={false}>{entry.movie.title}</Text>
+        <Text style={styles.continueSub} allowFontScaling={false}>{progressPercent}% watched</Text>
+      </View>
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+      </View>
+    </Pressable>
   );
 };
 
-const skeletonStyles = StyleSheet.create({
-  container: { marginTop: 28, paddingHorizontal: 20 },
-  header: { width: 140, height: 16, borderRadius: Radius.xs, backgroundColor: Colors.bg.surface, marginBottom: 12 },
-  cards: { gap: 10 },
-  card: { width: 124, height: 180, borderRadius: Radius.md, backgroundColor: Colors.bg.surface, borderWidth: 1, borderColor: Colors.glass.border },
-});
+const HeroBanner: React.FC<{
+  movie: Movie | null;
+  trailer: TrailerInfo | null | undefined;
+  trailerLoading: boolean;
+  onOpenTrailer: () => void;
+  onOpenMovie: () => void;
+  inWatchlist: boolean;
+  onToggleWatchlist: () => void;
+}> = ({
+  movie,
+  trailer,
+  trailerLoading,
+  onOpenTrailer,
+  onOpenMovie,
+  inWatchlist,
+  onToggleWatchlist,
+}) => {
+  if (!movie) {
+    return (
+      <View style={styles.heroSkeleton}>
+        <ActivityIndicator size="small" color={Colors.accent.crimson} />
+      </View>
+    );
+  }
 
-// ─── HomeScreen Redesign ───────────────────────────────────────────────────
+  const trailerText = trailerLoading
+    ? 'Checking Trailer'
+    : trailer
+      ? trailer.type === 'Trailer'
+        ? 'Watch Trailer'
+        : trailer.type === 'Teaser'
+          ? 'Watch Teaser'
+          : 'Watch Clip'
+      : 'Trailer Unavailable';
+
+  return (
+    <View style={styles.heroWrap}>
+      <Image
+        source={{ uri: movie.backdrop_path || undefined }}
+        style={styles.heroBackdrop}
+        contentFit="cover"
+        transition={420}
+        cachePolicy="memory-disk"
+      />
+
+      <LinearGradient
+        colors={['rgba(7,7,9,0.15)', 'rgba(7,7,9,0.55)', 'rgba(7,7,9,0.98)']}
+        style={StyleSheet.absoluteFill}
+      />
+
+      <View style={styles.heroContent}>
+        <View>
+          <Text style={styles.heroLabel} allowFontScaling={false}>Featured Tonight</Text>
+          <Text style={styles.heroTitle} numberOfLines={2} allowFontScaling={false}>{movie.title}</Text>
+          <Text style={styles.heroMeta} allowFontScaling={false}>
+            {releaseYear(movie.release_date)} • {movie.vote_average.toFixed(1)} ★ • {genreLine(movie.genre_ids)}
+          </Text>
+          <Text style={styles.heroOverview} numberOfLines={3} allowFontScaling={false}>{movie.overview}</Text>
+        </View>
+
+        <View style={styles.heroActions}>
+          <Pressable
+            style={[styles.heroPrimaryBtn, !trailer && styles.heroDisabledBtn]}
+            disabled={!trailer || trailerLoading}
+            onPress={onOpenTrailer}
+          >
+            <Ionicons name={trailer ? 'play' : 'alert-circle-outline'} size={14} color={trailer ? '#071018' : Colors.text.secondary} />
+            <Text
+              style={[styles.heroPrimaryBtnText, !trailer && styles.heroDisabledBtnText]}
+              allowFontScaling={false}
+            >
+              {trailerText}
+            </Text>
+          </Pressable>
+
+          <Pressable style={styles.heroSecondaryBtn} onPress={onOpenMovie}>
+            <Ionicons name="information-circle-outline" size={14} color={Colors.text.primary} />
+            <Text style={styles.heroSecondaryBtnText} allowFontScaling={false}>Details</Text>
+          </Pressable>
+
+          <Pressable style={styles.heroSecondaryBtn} onPress={onToggleWatchlist}>
+            <Ionicons name={inWatchlist ? 'bookmark' : 'bookmark-outline'} size={14} color={Colors.text.primary} />
+            <Text style={styles.heroSecondaryBtnText} allowFontScaling={false}>{inWatchlist ? 'Saved' : 'Watchlist'}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+};
+
 export const HomeScreen: React.FC = () => {
-  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
   const { profile } = useAuthStore();
+  const {
+    items: watchlistItems,
+    loadWatchlist,
+    addToWatchlist,
+    removeFromWatchlist,
+    isInWatchlist,
+  } = useWatchlistStore();
+  const backendStatus = useBackendStatusStore(state => state.status);
 
-  const [activeHub, setActiveHub] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
 
-  // Live state streams
-  const [heroMovies, setHeroMovies] = useState<Movie[]>(CURATED.slice(0, 5));
-  const [trending, setTrending] = useState<Movie[]>(CURATED.slice(0, 10));
-  const [recommended, setRecommended] = useState<Movie[]>([...CURATED].sort((a, b) => b.vote_average - a.vote_average).slice(0, 8));
-  const [newReleases, setNewReleases] = useState<Movie[]>([...CURATED].sort((a, b) => new Date(b.release_date || '').getTime() - new Date(a.release_date || '').getTime()).slice(0, 8));
-
-  // Dynamic dynamic lazy loaded rails lists (Infinite Discovery Core)
-  const [sciFiMovies, setSciFiMovies] = useState<Movie[]>([]);
-  const [thrillerMovies, setThrillerMovies] = useState<Movie[]>([]);
-  const [criticallyAcclaimed, setCriticallyAcclaimed] = useState<Movie[]>([]);
-  const [bollywoodMovies, setBollywoodMovies] = useState<Movie[]>([]);
-  const [animeUniverse, setAnimeUniverse] = useState<Movie[]>([]);
-  
   const [refreshing, setRefreshing] = useState(false);
-  const [loading, setLoading] = useState(true);
+  const [bootLoading, setBootLoading] = useState(true);
+  const [heroMovies, setHeroMovies] = useState<Movie[]>([]);
+  const [heroIndex, setHeroIndex] = useState(0);
+  const [heroTrailerMap, setHeroTrailerMap] = useState<Record<number, TrailerInfo | null>>({});
+  const [heroTrailerLoadingMap, setHeroTrailerLoadingMap] = useState<Record<number, boolean>>({});
 
-  // Infinite Scroll Pagination State
-  const [visibleRailCount, setVisibleRailCount] = useState(5);
-  const [isPaginationLoading, setIsPaginationLoading] = useState(false);
+  const [continueWatching, setContinueWatching] = useState<ContinueWatchingEntry[]>([]);
+  const [aiRecommendations, setAiRecommendations] = useState<Movie[]>([]);
 
-  // Dynamic lists loader
-  const loadData = useCallback(async () => {
+  const [selectedMoodId, setSelectedMoodId] = useState<string>(MOOD_RAILS[0].id);
+  const [moodRailById, setMoodRailById] = useState<Record<string, Movie[]>>({});
+  const [moodLoading, setMoodLoading] = useState(false);
+
+  const [premiumRails, setPremiumRails] = useState<PremiumRailState[]>(
+    PREMIUM_RAIL_DEFS.map(def => ({ ...def, movies: [], loading: true })),
+  );
+
+  const headerGreeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  }, []);
+
+  const activeHeroMovie = heroMovies[heroIndex] || null;
+
+  const activeHeroTrailer = activeHeroMovie ? heroTrailerMap[activeHeroMovie.id] : null;
+  const activeHeroTrailerLoading = activeHeroMovie ? Boolean(heroTrailerLoadingMap[activeHeroMovie.id]) : false;
+
+  const readContinueWatching = useCallback(async (): Promise<ContinueWatchingEntry[]> => {
     try {
-      // 1. Fetch live dynamic trending
-      const trendingRes = await tmdbApi.getTrending();
-      if (trendingRes?.results?.length > 0) {
-        setTrending(trendingRes.results.slice(0, 10));
-        setHeroMovies(trendingRes.results.slice(0, 5));
-      } else {
-        setTrending(CURATED.slice(0, 10));
-        setHeroMovies(CURATED.slice(0, 5));
-      }
-
-      // 2. Fetch live dynamic recommended
-      const popularRes = await tmdbApi.getPopular();
-      if (popularRes?.results?.length > 0) {
-        setRecommended(popularRes.results.slice(0, 8));
-      } else {
-        setRecommended(CURATED.slice(10, 18));
-      }
-
-      // 3. Fetch live dynamic new releases
-      const upcomingRes = await tmdbApi.getUpcoming();
-      if (upcomingRes?.results?.length > 0) {
-        setNewReleases(upcomingRes.results.slice(0, 8));
-      } else {
-        setNewReleases([...CURATED].reverse().slice(0, 8));
-      }
-
-      // 4. Fetch dynamic sci-fi via customized search to ensure distinct visual rows
-      const scifiRes = await tmdbApi.searchMovies("Sci-Fi space");
-      if (scifiRes?.results?.length > 0) {
-        setSciFiMovies(scifiRes.results.slice(0, 10));
-      } else {
-        // Fallback: distinct slice filtering sci-fi genre
-        setSciFiMovies(CURATED.filter(m => m.genre_ids.includes(878)));
-      }
-
-      // 5. Fetch dynamic thrillers via customized search to ensure distinct visual rows
-      const thrillerRes = await tmdbApi.searchMovies("Psychological Suspense Thriller");
-      if (thrillerRes?.results?.length > 0) {
-        setThrillerMovies(thrillerRes.results.slice(0, 10));
-      } else {
-        // Fallback: distinct slice filtering thriller/mystery genres
-        setThrillerMovies(CURATED.filter(m => m.genre_ids.includes(53) || m.genre_ids.includes(9648)));
-      }
-
-      // 6. Fetch critically acclaimed movies (Top Rated)
-      const topRatedRes = await tmdbApi.getTopRated();
-      if (topRatedRes?.results?.length > 0) {
-        setCriticallyAcclaimed(topRatedRes.results.slice(0, 10));
-      } else {
-        setCriticallyAcclaimed([...CURATED].sort((a, b) => b.vote_average - a.vote_average).slice(0, 8));
-      }
-
-      // 7. Fetch Bollywood Spotlight via search to pull actual live regional movies
-      const bollywoodRes = await tmdbApi.searchMovies("Bollywood Hindi");
-      if (bollywoodRes?.results?.length > 0) {
-        setBollywoodMovies(bollywoodRes.results.slice(0, 10));
-      } else {
-        // Fallback: distinct slice containing actual curated regional films (RRR, 3 Idiots)
-        setBollywoodMovies(CURATED.filter(m => [11614188, 1187043, 3783958].includes(m.id)));
-      }
-
-      // 8. Fetch Crunchyroll Anime Universe via search
-      const animeRes = await tmdbApi.searchMovies("Studio Ghibli Anime");
-      if (animeRes?.results?.length > 0) {
-        setAnimeUniverse(animeRes.results.slice(0, 10));
-      } else {
-        // Fallback: distinct slice containing curated anime/animation films (Spirited Away, Spider-Verse)
-        setAnimeUniverse(CURATED.filter(m => [245429, 9362722].includes(m.id)));
-      }
-
-    } catch (err) {
-      console.log('Failed to load live TMDB discover rails. Retaining local fallbacks.', err);
-      // Ensure robust initial offline states are populated completely with zero duplicates
-      setTrending(CURATED.slice(0, 10));
-      setHeroMovies(CURATED.slice(0, 5));
-      setRecommended(CURATED.slice(10, 18));
-      setNewReleases([...CURATED].reverse().slice(0, 8));
-      setSciFiMovies(CURATED.filter(m => m.genre_ids.includes(878)));
-      setThrillerMovies(CURATED.filter(m => m.genre_ids.includes(53)));
-      setCriticallyAcclaimed([...CURATED].sort((a, b) => b.vote_average - a.vote_average).slice(0, 8));
-      setBollywoodMovies(CURATED.filter(m => [11614188, 1187043, 3783958].includes(m.id)));
-      setAnimeUniverse(CURATED.filter(m => [245429, 9362722].includes(m.id)));
-    } finally {
-      setLoading(false);
+      const raw = await AsyncStorage.getItem(CONTINUE_WATCHING_KEY);
+      if (!raw) return [];
+      const parsed = JSON.parse(raw) as ContinueWatchingEntry[];
+      if (!Array.isArray(parsed)) return [];
+      return parsed
+        .filter(entry => entry?.movie?.id && isQualityMovie(entry.movie))
+        .sort((a, b) => new Date(b.lastViewedAt).getTime() - new Date(a.lastViewedAt).getTime())
+        .slice(0, 12);
+    } catch {
+      return [];
     }
   }, []);
 
-  useFocusEffect(
-    useCallback(() => {
-      loadData();
-    }, [loadData])
-  );
+  const writeContinueWatching = useCallback(async (entries: ContinueWatchingEntry[]) => {
+    try {
+      await AsyncStorage.setItem(CONTINUE_WATCHING_KEY, JSON.stringify(entries));
+    } catch {
+      // no-op
+    }
+  }, []);
 
-  useEffect(() => {
-    loadData();
-  }, [loadData, profile]);
+  const updateContinueWatching = useCallback(async (movie: Movie) => {
+    const current = await readContinueWatching();
+    const existing = current.find(entry => entry.movie.id === movie.id);
+    const nextProgress = existing ? Math.min(0.95, existing.progress + 0.12) : 0.18;
+
+    const updated: ContinueWatchingEntry[] = [
+      {
+        movie,
+        progress: nextProgress,
+        lastViewedAt: new Date().toISOString(),
+      },
+      ...current.filter(entry => entry.movie.id !== movie.id),
+    ].slice(0, 20);
+
+    if (!isMountedRef.current) return;
+    setContinueWatching(updated.slice(0, 10));
+    await writeContinueWatching(updated);
+  }, [readContinueWatching, writeContinueWatching]);
+
+  const fetchRawMovies = useCallback(async (
+    mode: 'trending' | 'search' | 'discover',
+    args: {
+      query?: string;
+      discoverParams?: Record<string, string | number | undefined>;
+      limit?: number;
+    } = {},
+  ): Promise<Movie[]> => {
+    const limit = args.limit ?? 35;
+
+    try {
+      if (mode === 'trending') {
+        const { data } = await apiClient.get<RawMoviePayload[]>('/movies/trending', { params: { limit } });
+        return toMovies(data || []);
+      }
+
+      if (mode === 'search') {
+        const { data } = await apiClient.get<RawMoviePayload[]>('/movies/search', {
+          params: {
+            query: args.query,
+            limit,
+          },
+        });
+        return toMovies(data || []);
+      }
+
+      const discoverParams = args.discoverParams || {};
+      const { data } = await apiClient.get<RawMoviePayload[]>('/movies/discover', {
+        params: {
+          ...discoverParams,
+          vote_average_gte: 6.2,
+          vote_count_gte: 120,
+          limit,
+        },
+      });
+      return toMovies(data || []);
+    } catch (error) {
+      console.log(`[DEBUG] fetchRawMovies failed for mode ${mode}, using tmdbApi offline fallback:`, error);
+      
+      try {
+        if (mode === 'trending') {
+          const res = await tmdbApi.getTrending('week', limit);
+          return res.results;
+        }
+        if (mode === 'search') {
+          const res = await tmdbApi.searchMovies(args.query || '', 1, limit);
+          return res.results;
+        }
+        
+        // discover mode
+        const discoverParams = args.discoverParams || {};
+        const res = await tmdbApi.discover({
+          with_genres: discoverParams.with_genres ? String(discoverParams.with_genres) : undefined,
+          sort_by: discoverParams.sort_by ? String(discoverParams.sort_by) : undefined,
+          'vote_average.gte': discoverParams.vote_average_gte ? Number(discoverParams.vote_average_gte) : 6.2,
+          'vote_count.gte': discoverParams.vote_count_gte ? Number(discoverParams.vote_count_gte) : 120,
+          with_original_language: discoverParams.with_original_language ? String(discoverParams.with_original_language) : undefined,
+          primary_release_year: discoverParams.primary_release_year ? Number(discoverParams.primary_release_year) : undefined,
+          limit,
+        });
+        return res.results;
+      } catch (fallbackError) {
+        console.log('[DEBUG] tmdbApi fallback failed:', fallbackError);
+        return [];
+      }
+    }
+  }, []);
+
+  const getOrFetchRail = useCallback(async (
+    cacheKey: string,
+    loader: () => Promise<Movie[]>,
+  ): Promise<Movie[]> => {
+    const fromCache = getCacheRail(cacheKey);
+    if (fromCache) return fromCache;
+    const movies = await loader();
+    const cleaned = sanitizeMovieList(movies);
+    setCacheRail(cacheKey, cleaned);
+    return cleaned;
+  }, []);
+
+  const fetchHeroMovies = useCallback(async (): Promise<Movie[]> => {
+    const movies = await getOrFetchRail('hero-trending', () => fetchRawMovies('trending', { limit: 45 }));
+    return rankMovies(movies).slice(0, 7);
+  }, [fetchRawMovies, getOrFetchRail]);
+
+  const fetchAiRecommendations = useCallback(async (excludeIds: Set<number>): Promise<Movie[]> => {
+    const favoriteGenres = profile?.favorite_genres?.length
+      ? profile.favorite_genres.map(id => genreLabelMap[id]).filter(Boolean).join(', ')
+      : 'Drama, Thriller, Sci-Fi, Crime';
+
+    const prompt = [
+      'Curate exactly 20 high-confidence movie recommendations.',
+      'Keep selections diverse across languages, decades, and styles.',
+      'Avoid repeated Christopher Nolan and Marvel dominance.',
+      `Anchor partially around these genres: ${favoriteGenres}.`,
+      'Return only real movie titles.',
+    ].join(' ');
+
+    try {
+      const aiTitles = await chatService.getRecommendations(prompt);
+      const titleList = aiTitles
+        .map((item: any) => String(item?.Title || '').trim())
+        .filter(Boolean)
+        .slice(0, 24);
+
+      const mappedBatches = await Promise.all(
+        titleList.map(async title => {
+          try {
+            const list = await fetchRawMovies('search', { query: title, limit: 10 });
+            return list;
+          } catch {
+            return [];
+          }
+        }),
+      );
+
+      const combined = mappedBatches.flat();
+      const uniqueRanked = rankMovies(sanitizeMovieList(combined));
+      const filtered = uniqueRanked.filter(movie => !excludeIds.has(movie.id));
+
+      if (filtered.length >= 15) {
+        filtered.slice(0, 18).forEach(movie => excludeIds.add(movie.id));
+        return filtered.slice(0, 18);
+      }
+    } catch {
+      // fall through to deterministic discover fallback
+    }
+
+    const fallbackDiscover = await Promise.all([
+      fetchRawMovies('discover', { discoverParams: { with_genres: '18,53', sort_by: 'vote_average.desc' }, limit: 30 }),
+      fetchRawMovies('discover', { discoverParams: { with_genres: '878,9648', sort_by: 'popularity.desc' }, limit: 30 }),
+      fetchRawMovies('search', { query: 'international acclaimed cinema', limit: 30 }),
+    ]);
+
+    const fallback = rankMovies(sanitizeMovieList(fallbackDiscover.flat())).filter(movie => !excludeIds.has(movie.id)).slice(0, 18);
+    fallback.forEach(movie => excludeIds.add(movie.id));
+    return fallback;
+  }, [fetchRawMovies, profile?.favorite_genres]);
+
+  const fetchMoodRail = useCallback(async (mood: MoodDefinition): Promise<Movie[]> => {
+    const cacheKey = `mood-${mood.id}`;
+    return getOrFetchRail(cacheKey, () => fetchRawMovies('discover', {
+      discoverParams: {
+        with_genres: mood.discoverParams.with_genres,
+        sort_by: mood.discoverParams.sort_by || 'popularity.desc',
+        with_original_language: mood.discoverParams.with_original_language,
+      },
+      limit: 36,
+    }));
+  }, [fetchRawMovies, getOrFetchRail]);
+
+  const fetchPremiumRailRaw = useCallback(async (def: PremiumRailDefinition): Promise<Movie[]> => {
+    if (def.mode === 'trending') {
+      return getOrFetchRail(`rail-${def.id}`, () => fetchRawMovies('trending', { limit: 40 }));
+    }
+
+    if (def.mode === 'search') {
+      return getOrFetchRail(`rail-${def.id}`, () => fetchRawMovies('search', { query: def.searchQuery, limit: 40 }));
+    }
+
+    return getOrFetchRail(`rail-${def.id}`, () => fetchRawMovies('discover', {
+      discoverParams: {
+        with_genres: def.discoverParams?.with_genres,
+        with_original_language: def.discoverParams?.with_original_language,
+        sort_by: def.discoverParams?.sort_by || 'popularity.desc',
+        primary_release_year: def.discoverParams?.primary_release_year,
+      },
+      limit: 40,
+    }));
+  }, [fetchRawMovies, getOrFetchRail]);
+
+  const resolveTrailer = useCallback(async (movie: Movie): Promise<TrailerInfo | null> => {
+    const cached = TRAILER_CACHE.get(movie.id);
+    if (cached && cached.expiresAt > Date.now()) {
+      return cached.trailer;
+    }
+
+    try {
+      const imdbId = numberToImdbId(movie.id);
+      if (!imdbId) {
+        TRAILER_CACHE.set(movie.id, { trailer: null, expiresAt: Date.now() + CACHE_TTL_MS });
+        return null;
+      }
+
+      const { data } = await apiClient.get<RawMoviePayload>('/movies/details/' + imdbId);
+      const trailer = selectTrailerFromVideos((data as any)?.videos?.results || []);
+      TRAILER_CACHE.set(movie.id, {
+        trailer,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+      });
+      return trailer;
+    } catch {
+      TRAILER_CACHE.set(movie.id, {
+        trailer: null,
+        expiresAt: Date.now() + CACHE_TTL_MS,
+      });
+      return null;
+    }
+  }, []);
+
+  const warmHeroTrailer = useCallback(async (movie: Movie | null | undefined) => {
+    if (!movie || heroTrailerMap[movie.id] !== undefined || heroTrailerLoadingMap[movie.id]) return;
+
+    setHeroTrailerLoadingMap(prev => ({ ...prev, [movie.id]: true }));
+    const trailer = await resolveTrailer(movie);
+    if (!isMountedRef.current) return;
+    setHeroTrailerMap(prev => ({ ...prev, [movie.id]: trailer }));
+    setHeroTrailerLoadingMap(prev => ({ ...prev, [movie.id]: false }));
+  }, [heroTrailerLoadingMap, heroTrailerMap, resolveTrailer]);
+
+  const openMovie = useCallback((movie: Movie) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    updateContinueWatching(movie).catch(() => {});
+    navigation.navigate('MovieDetails', { movieId: movie.id });
+  }, [navigation, updateContinueWatching]);
+
+  const toggleHeroWatchlist = useCallback(() => {
+    if (!activeHeroMovie) return;
+    Haptics.selectionAsync().catch(() => {});
+    if (isInWatchlist(activeHeroMovie.id)) {
+      removeFromWatchlist(activeHeroMovie.id);
+      return;
+    }
+    addToWatchlist(activeHeroMovie);
+  }, [activeHeroMovie, addToWatchlist, isInWatchlist, removeFromWatchlist]);
+
+  const loadHomepage = useCallback(async (force = false) => {
+    const now = Date.now();
+
+    if (!force && HOME_CACHE.payload && now - HOME_CACHE.payload.timestamp < CACHE_TTL_MS) {
+      const cache = HOME_CACHE.payload;
+      if (!isMountedRef.current) return;
+
+      setHeroMovies(cache.heroMovies);
+      setAiRecommendations(cache.aiRecommendations);
+      setMoodRailById(cache.moodRailById);
+      setPremiumRails(PREMIUM_RAIL_DEFS.map(def => {
+        const hit = cache.premiumRails.find(rail => rail.id === def.id);
+        return {
+          ...def,
+          movies: hit?.movies || [],
+          loading: false,
+        };
+      }));
+      setBootLoading(false);
+      return;
+    }
+
+    setBootLoading(true);
+    setPremiumRails(PREMIUM_RAIL_DEFS.map(def => ({ ...def, movies: [], loading: true })));
+
+    const history = await readContinueWatching();
+    if (isMountedRef.current) {
+      setContinueWatching(history.slice(0, 10));
+    }
+
+    let hero: Movie[] = [];
+    try {
+      hero = await fetchHeroMovies();
+      if (isMountedRef.current) {
+        setHeroMovies(hero);
+        setHeroIndex(0);
+        hero.slice(0, 2).forEach(movie => {
+          if (movie.poster_path) Image.prefetch(movie.poster_path);
+          if (movie.backdrop_path) Image.prefetch(movie.backdrop_path);
+        });
+      }
+    } catch (e) {
+      console.log('Error fetching hero movies in loadHomepage:', e);
+    }
+
+    const usedIds = new Set<number>([
+      ...hero.map(movie => movie.id),
+      ...history.map(entry => entry.movie.id),
+    ]);
+
+    let aiRail: Movie[] = [];
+    try {
+      aiRail = await fetchAiRecommendations(usedIds);
+      if (isMountedRef.current) {
+        setAiRecommendations(aiRail);
+        aiRail.slice(0, 6).forEach(movie => {
+          if (movie.poster_path) Image.prefetch(movie.poster_path);
+        });
+      }
+    } catch (e) {
+      console.log('Error fetching AI recommendations in loadHomepage:', e);
+    }
+
+    const initialMood = MOOD_RAILS.find(mood => mood.id === selectedMoodId) || MOOD_RAILS[0];
+    let moodRaw: Movie[] = [];
+    try {
+      moodRaw = await fetchMoodRail(initialMood);
+    } catch (e) {
+      console.log('Error fetching mood rail in loadHomepage:', e);
+    }
+    const moodChosen = mergeByDiversity(moodRaw, usedIds, new Set(), 16);
+    const initialMoodMap: Record<string, Movie[]> = {
+      [initialMood.id]: moodChosen,
+    };
+
+    if (isMountedRef.current) {
+      setMoodRailById(initialMoodMap);
+    }
+
+    const nearbyIds = new Set<number>(moodChosen.map(movie => movie.id));
+    const builtRails: Array<{ id: string; movies: Movie[] }> = [];
+
+    for (const def of PREMIUM_RAIL_DEFS) {
+      let raw: Movie[] = [];
+      try {
+        raw = await fetchPremiumRailRaw(def);
+      } catch {
+        raw = [];
+      }
+
+      const picked = mergeByDiversity(raw, usedIds, nearbyIds, 16);
+      builtRails.push({ id: def.id, movies: picked });
+
+      const nextNearby = new Set<number>(picked.map(movie => movie.id));
+      nextNearby.forEach(id => nearbyIds.add(id));
+      if (nearbyIds.size > 120) {
+        const keep = Array.from(nearbyIds).slice(-60);
+        nearbyIds.clear();
+        keep.forEach(id => nearbyIds.add(id));
+      }
+
+      if (isMountedRef.current) {
+        setPremiumRails(prev => prev.map(rail => {
+          if (rail.id !== def.id) return rail;
+          return {
+            ...rail,
+            movies: picked,
+            loading: false,
+          };
+        }));
+      }
+    }
+
+    HOME_CACHE.payload = {
+      timestamp: Date.now(),
+      heroMovies: hero,
+      aiRecommendations: aiRail,
+      moodRailById: initialMoodMap,
+      premiumRails: builtRails,
+    };
+
+    if (isMountedRef.current) {
+      setBootLoading(false);
+    }
+  }, [fetchAiRecommendations, fetchHeroMovies, fetchMoodRail, fetchPremiumRailRaw, readContinueWatching, selectedMoodId]);
+
+  const refreshMoodRail = useCallback(async (mood: MoodDefinition) => {
+    if (moodRailById[mood.id]?.length) {
+      setSelectedMoodId(mood.id);
+      return;
+    }
+
+    setSelectedMoodId(mood.id);
+    setMoodLoading(true);
+
+    try {
+      const raw = await fetchMoodRail(mood);
+      const cleaned = rankMovies(sanitizeMovieList(raw)).slice(0, 16);
+      if (!isMountedRef.current) return;
+      setMoodRailById(prev => ({ ...prev, [mood.id]: cleaned }));
+    } finally {
+      if (isMountedRef.current) {
+        setMoodLoading(false);
+      }
+    }
+  }, [fetchMoodRail, moodRailById]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await loadData();
+    HOME_CACHE.payload = null;
+    await loadHomepage(true);
     setRefreshing(false);
-  }, [loadData]);
+  }, [loadHomepage]);
 
-  // Load more rails dynamically when scroll threshold reached (Dopamine Infinite Scroll)
-  const handleScrollEnd = () => {
-    if (visibleRailCount >= 16 || isPaginationLoading) return;
-    setIsPaginationLoading(true);
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-    
-    setTimeout(() => {
-      setVisibleRailCount(prev => prev + 3);
-      setIsPaginationLoading(false);
-    }, 1000);
-  };
+  useEffect(() => {
+    isMountedRef.current = true;
+    loadWatchlist().catch(() => {});
+    loadHomepage(false).catch(() => {
+      if (isMountedRef.current) setBootLoading(false);
+    });
 
-  const goToMovie = (id: number) => navigation.navigate('MovieDetails', { movieId: id });
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, [loadHomepage, loadWatchlist]);
 
-  // Smooth Header alpha transition based on scroll position
-  const scrollY = useSharedValue(0);
-  const scrollHandler = useAnimatedScrollHandler(e => { scrollY.value = e.contentOffset.y; });
+  useEffect(() => {
+    if (backendStatus === 'AWAKE') {
+      console.log('[HomeScreen] Render backend woke up! Refreshing homepage seamlessly with live data...');
+      loadHomepage(true).catch(() => {});
+    }
+  }, [backendStatus, loadHomepage]);
 
-  const headerStyle = useAnimatedStyle(() => ({
-    backgroundColor: `rgba(7,7,9,${interpolate(scrollY.value, [0, 80], [0.65, 0.96], Extrapolate.CLAMP)})`,
-    borderBottomColor: `rgba(255,255,255,${interpolate(scrollY.value, [0, 80], [0, 0.08], Extrapolate.CLAMP)})`,
-    borderBottomWidth: 1,
-  }));
+  useFocusEffect(
+    useCallback(() => {
+      readContinueWatching().then(entries => {
+        if (!isMountedRef.current) return;
+        setContinueWatching(entries.slice(0, 10));
+      }).catch(() => {});
+    }, [readContinueWatching]),
+  );
 
-  const greeting = () => {
-    const h = new Date().getHours();
-    if (h < 12) return 'Good morning';
-    if (h < 18) return 'Good afternoon';
-    return 'Good evening';
-  };
+  useEffect(() => {
+    if (heroMovies.length <= 1) return;
 
-  // Filter content catalog depending on selected brand/universe hub
-  const getFilteredList = (list: Movie[]) => {
-    if (!activeHub) return list;
-    if (activeHub === 'nolan') return list.filter(m => [15398776, 816692, 1375666, 468569].includes(m.id));
-    if (activeHub === 'marvel') return list.filter(m => [133093, 4154900, 9362722].includes(m.id));
-    return list.slice(0, 4);
-  };
+    const interval = setInterval(() => {
+      setHeroIndex(current => (current + 1) % heroMovies.length);
+    }, 7000);
+
+    return () => clearInterval(interval);
+  }, [heroMovies]);
+
+  useEffect(() => {
+    if (!activeHeroMovie) return;
+
+    warmHeroTrailer(activeHeroMovie).catch(() => {});
+    const nextMovie = heroMovies[(heroIndex + 1) % Math.max(heroMovies.length, 1)];
+    warmHeroTrailer(nextMovie).catch(() => {});
+  }, [activeHeroMovie, heroIndex, heroMovies, warmHeroTrailer]);
+
+  const openHeroTrailer = useCallback(() => {
+    if (!activeHeroTrailer) return;
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+    Linking.openURL(`https://www.youtube.com/watch?v=${activeHeroTrailer.key}`).catch(() => {});
+  }, [activeHeroTrailer]);
+
+  const heroInWatchlist = activeHeroMovie ? isInWatchlist(activeHeroMovie.id) : false;
 
   return (
     <View style={styles.root}>
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Premium Glassmorphic Header */}
-      <Animated.View style={[styles.header, { paddingTop: insets.top + 8 }, headerStyle]}>
-        <View style={styles.headerTitleRow}>
-          <Text style={styles.greeting} allowFontScaling={false}>{greeting()}</Text>
-          <Text style={styles.headerWordmark} allowFontScaling={false}>
-            CINE<Text style={styles.headerAI}>AI</Text>
-          </Text>
+      <View style={[styles.topHeader, { paddingTop: insets.top + 8 }]}>
+        <View>
+          <Text style={styles.topGreeting} allowFontScaling={false}>{headerGreeting}</Text>
+          <Text style={styles.topBrand} allowFontScaling={false}>CINE<Text style={styles.topBrandAi}>AI</Text></Text>
         </View>
-        <View style={styles.headerActions}>
+
+        <View style={styles.topActions}>
           <Pressable
-            style={styles.headerBtn}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-              navigation.navigate('AIChat');
-            }}
+            style={styles.topIconBtn}
+            onPress={() => navigation.navigate('AIChat')}
             accessibilityRole="button"
-            accessibilityLabel="Open AI companion chatbot"
+            accessibilityLabel="Open CineAI chat"
           >
-            <LinearGradient
-              colors={[Colors.accent.orbStart, Colors.accent.orbEnd]}
-              style={styles.orbGlow}
-            >
-              <Ionicons name="sparkles" size={13} color="#FFF" />
-            </LinearGradient>
+            <Ionicons name="sparkles" size={14} color={Colors.text.primary} />
           </Pressable>
           <Pressable
-            style={styles.avatarBtn}
+            style={styles.topAvatar}
             onPress={() => navigation.navigate('Profile')}
             accessibilityRole="button"
             accessibilityLabel="Open profile"
           >
-            <View style={styles.avatar}>
-              <Text style={styles.avatarText} allowFontScaling={false}>
-                {(profile?.name?.[0] || 'G').toUpperCase()}
-              </Text>
-            </View>
+            <Text style={styles.topAvatarText} allowFontScaling={false}>
+              {(profile?.name?.[0] || 'G').toUpperCase()}
+            </Text>
           </Pressable>
         </View>
-      </Animated.View>
+      </View>
 
-      <Animated.ScrollView
-        onScroll={scrollHandler}
-        scrollEventThrottle={16}
+      <ScrollView
         showsVerticalScrollIndicator={false}
-        onMomentumScrollEnd={e => {
-          const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-          const isCloseToBottom = layoutMeasurement.height + contentOffset.y >= contentSize.height - 400;
-          if (isCloseToBottom) {
-            handleScrollEnd();
-          }
-        }}
-        contentContainerStyle={{ paddingBottom: 120 }}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent.crimson} />
-        }
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.accent.crimson} />}
       >
-        {/* Full-bleed Dynamic Hero V3 */}
-        <HeroBannerV3 movies={getFilteredList(heroMovies)} onPress={goToMovie} />
+        <HeroBanner
+          movie={activeHeroMovie}
+          trailer={activeHeroTrailer}
+          trailerLoading={activeHeroTrailerLoading}
+          onOpenTrailer={openHeroTrailer}
+          onOpenMovie={() => activeHeroMovie && openMovie(activeHeroMovie)}
+          inWatchlist={heroInWatchlist}
+          onToggleWatchlist={toggleHeroWatchlist}
+        />
 
-        {/* Ambient Ambient Glow Underlays */}
-        <View style={styles.contentBody}>
+        {heroMovies.length > 1 ? (
+          <View style={styles.heroIndicators}>
+            {heroMovies.map((movie, index) => (
+              <View
+                key={`hero-dot-${movie.id}`}
+                style={[styles.heroDot, index === heroIndex && styles.heroDotActive]}
+              />
+            ))}
+          </View>
+        ) : null}
 
-          {/* Premium Universe selector row */}
-          <View style={styles.studioSec}>
-            <StudioHubRow activeHub={activeHub} onSelectHub={setActiveHub} />
+        <View style={styles.body}>
+          {continueWatching.length > 0 ? (
+            <View style={styles.sectionWrap}>
+              <SectionHeader title="Continue Watching" subtitle="From your real watch history" />
+              <FlatList
+                data={continueWatching}
+                horizontal
+                keyExtractor={item => `continue-${item.movie.id}`}
+                renderItem={({ item }) => <ContinueWatchingCard entry={item} onPress={openMovie} />}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.railContent}
+                initialNumToRender={4}
+                maxToRenderPerBatch={6}
+                windowSize={4}
+                removeClippedSubviews
+              />
+            </View>
+          ) : null}
+
+          <View style={styles.sectionWrap}>
+            <SectionHeader
+              title="AI Recommendations"
+              subtitle="Curated high-confidence picks"
+            />
+            {bootLoading && aiRecommendations.length === 0 ? (
+              <RailSkeleton />
+            ) : (
+              <FlatList
+                data={aiRecommendations}
+                horizontal
+                keyExtractor={item => `ai-${item.id}`}
+                renderItem={({ item }) => <PosterRailCard movie={item} onPress={openMovie} />}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.railContent}
+                initialNumToRender={5}
+                maxToRenderPerBatch={6}
+                windowSize={4}
+                removeClippedSubviews
+              />
+            )}
           </View>
 
-          {/* CORE SECTION 1: Continue Watching (Netflix Resumption layout) */}
-          {visibleRailCount >= 1 && (
-            <View style={styles.section}>
-              <SectionHeader title="Continue Watching" subtitle="Resume where you left off" />
-              <FlatList
-                data={MOCK_CONTINUE_WATCHING}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={(item, index) => `cw-${index}`}
-                contentContainerStyle={styles.carouselPad}
-                renderItem={({ item }) => (
-                  <ContinueWatchingCard
-                    movie={item.movie}
-                    progress={item.progress}
-                    timeLabel={item.timeLabel}
-                    onPress={() => goToMovie(item.movie.id)}
-                  />
-                )}
-              />
-            </View>
-          )}
+          <View style={styles.sectionWrap}>
+            <SectionHeader
+              title="Mood Discovery"
+              subtitle="Tap a mood to generate a live TMDB rail"
+            />
 
-          {/* CORE SECTION 2: Trending Worldwide (Netflix Numeric Ranks layout) */}
-          {visibleRailCount >= 2 && (
-            <View style={styles.section}>
-              <SectionHeader title="Trending Worldwide" subtitle="The absolute biggest movies right now" />
-              <FlatList
-                data={getFilteredList(trending)}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={m => `trend-${m.id}`}
-                contentContainerStyle={styles.carouselPadTrend}
-                renderItem={({ item, index }) => (
-                  <RankingPosterCard
-                    movie={item}
-                    rank={index + 1}
-                    onPress={() => goToMovie(item.id)}
-                  />
-                )}
-              />
-            </View>
-          )}
-
-          {/* CORE SECTION 3: CineAI Taste Recommendations */}
-          {visibleRailCount >= 3 && (
-            <View style={styles.section}>
-              <SectionHeader title="CineAI Recommends" subtitle="Personalized according to your critic preference" />
-              <FlatList
-                data={getFilteredList(recommended)}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={m => `rec-${m.id}`}
-                contentContainerStyle={styles.carouselPad}
-                renderItem={({ item }) => (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moodChipRow}>
+              {MOOD_RAILS.map(mood => {
+                const selected = mood.id === selectedMoodId;
+                return (
                   <Pressable
-                    onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {}); goToMovie(item.id); }}
-                    style={styles.editorialCard}
+                    key={mood.id}
+                    style={[styles.moodChip, selected && styles.moodChipSelected]}
+                    onPress={() => refreshMoodRail(mood)}
                   >
-                    <Image
-                      source={{ uri: item.poster_path || undefined }}
-                      style={styles.editorialPoster}
-                      contentFit="cover"
-                      cachePolicy="memory-disk"
-                    />
-                    <LinearGradient colors={['transparent', 'rgba(7,7,9,0.95)']} style={styles.editorialGrad} />
-                    <View style={styles.editorialMeta}>
-                      <View style={styles.aiMatchChip}>
-                        <Ionicons name="sparkles" size={9} color={Colors.accent.crimson} />
-                        <Text style={styles.aiMatchText} allowFontScaling={false}>
-                          {Math.floor(Math.random() * 10 + 89)}% Match
-                        </Text>
-                      </View>
-                      <Text style={styles.editorialTitle} numberOfLines={2} allowFontScaling={false}>
-                        {item.title}
-                      </Text>
-                    </View>
+                    <Text style={[styles.moodChipLabel, selected && styles.moodChipLabelSelected]} allowFontScaling={false}>
+                      {mood.label}
+                    </Text>
                   </Pressable>
-                )}
-              />
-            </View>
-          )}
+                );
+              })}
+            </ScrollView>
 
-          {/* CORE SECTION 4: Interactive Mood Filter Capsule Rows */}
-          {visibleRailCount >= 4 && (
-            <View style={styles.section}>
-              <SectionHeader title="Select Your Cinematic Mood" subtitle="Let your emotions guide your selection" />
-              <View style={styles.moodGrid}>
-                {MOOD_CATEGORIES.map(cat => (
-                  <MoodCard
-                    key={cat.id}
-                    cat={cat}
-                    onPress={() => {
-                      navigation.navigate('Search', { query: cat.query });
-                    }}
-                  />
-                ))}
-              </View>
-            </View>
-          )}
-
-          {/* CORE SECTION 5: New Releases */}
-          {visibleRailCount >= 5 && (
-            <View style={styles.section}>
-              <SectionHeader title="New Releases" subtitle="Straight out of the cinemas tonight" />
-              <FlatList
-                data={getFilteredList(newReleases)}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={m => `new-${m.id}`}
-                contentContainerStyle={styles.carouselPad}
-                renderItem={({ item }) => (
-                  <PosterCard movie={item} onPress={() => goToMovie(item.id)} />
-                )}
-              />
-            </View>
-          )}
-
-          {/* LAZY LOADED ENDLESS ROW FEED (Dopamine Discovery Elements) */}
-
-          {/* PAGINATED ROW 6: Mind-Bending Sci-Fi */}
-          {visibleRailCount >= 6 && sciFiMovies.length > 0 && (
-            <View style={styles.section}>
-              <SectionHeader title="Mind-Bending Sci-Fi" subtitle="Challenge your perception of space and time" />
-              <FlatList
-                data={getFilteredList(sciFiMovies)}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={m => `scifi-${m.id}`}
-                contentContainerStyle={styles.carouselPad}
-                renderItem={({ item }) => (
-                  <PosterCard movie={item} onPress={() => goToMovie(item.id)} />
-                )}
-              />
-            </View>
-          )}
-
-          {/* PAGINATED ROW 7: Critically Acclaimed (Top IMDb) */}
-          {visibleRailCount >= 7 && criticallyAcclaimed.length > 0 && (
-            <View style={styles.section}>
-              <SectionHeader title="Critically Acclaimed Masterpieces" subtitle="Flawless cinema certified by absolute critics" />
-              <FlatList
-                data={getFilteredList(criticallyAcclaimed)}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={m => `crit-${m.id}`}
-                contentContainerStyle={styles.carouselPad}
-                renderItem={({ item }) => (
-                  <PosterCard movie={item} onPress={() => goToMovie(item.id)} />
-                )}
-              />
-            </View>
-          )}
-
-          {/* PAGINATED ROW 8: Dark Psychological Thrillers */}
-          {visibleRailCount >= 8 && thrillerMovies.length > 0 && (
-            <View style={styles.section}>
-              <SectionHeader title="Dark Psychological Thrillers" subtitle="High tension twists that grip you until the end" />
-              <FlatList
-                data={getFilteredList(thrillerMovies)}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={m => `thrill-${m.id}`}
-                contentContainerStyle={styles.carouselPad}
-                renderItem={({ item }) => (
-                  <PosterCard movie={item} onPress={() => goToMovie(item.id)} />
-                )}
-              />
-            </View>
-          )}
-
-          {/* PAGINATED ROW 9: Crunchyroll Anime Spotlight */}
-          {visibleRailCount >= 9 && animeUniverse.length > 0 && (
-            <View style={styles.section}>
-              <SectionHeader title="Crunchyroll Anime Universe" subtitle="Epic hand-drawn visual masterpieces" />
-              <FlatList
-                data={getFilteredList(animeUniverse)}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={m => `anime-${m.id}`}
-                contentContainerStyle={styles.carouselPad}
-                renderItem={({ item }) => (
-                  <PosterCard movie={item} onPress={() => goToMovie(item.id)} showRating={false} />
-                )}
-              />
-            </View>
-          )}
-
-          {/* PAGINATED ROW 10: Bollywood & Regional Blockbusters */}
-          {visibleRailCount >= 10 && bollywoodMovies.length > 0 && (
-            <View style={styles.section}>
-              <SectionHeader title="Bollywood Spotlight" subtitle="Triumphant cinematic musical epics" />
-              <FlatList
-                data={getFilteredList(bollywoodMovies)}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={m => `bolly-${m.id}`}
-                contentContainerStyle={styles.carouselPad}
-                renderItem={({ item }) => (
-                  <PosterCard movie={item} onPress={() => goToMovie(item.id)} />
-                )}
-              />
-            </View>
-          )}
-
-          {/* PAGINATED ROW 11: Late Night Recs */}
-          {visibleRailCount >= 11 && (
-            <View style={styles.section}>
-              <SectionHeader title="Late Night Recommendations" subtitle="Understated slow burners perfect for midnight" />
-              <FlatList
-                data={getFilteredList(recommended.reverse())}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                keyExtractor={m => `late-${m.id}`}
-                contentContainerStyle={styles.carouselPad}
-                renderItem={({ item }) => (
-                  <PosterCard movie={item} onPress={() => goToMovie(item.id)} />
-                )}
-              />
-            </View>
-          )}
-
-          {/* Infinite Pagination Shimmer Placeholder Skeletons */}
-          {isPaginationLoading && (
-            <View style={{ paddingVertical: 12 }}>
+            {moodLoading ? (
               <RailSkeleton />
-              <ActivityIndicator size="small" color={Colors.accent.crimson} style={{ marginTop: 24 }} />
-            </View>
-          )}
+            ) : (
+              <FlatList
+                data={moodRailById[selectedMoodId] || []}
+                horizontal
+                keyExtractor={item => `mood-${selectedMoodId}-${item.id}`}
+                renderItem={({ item }) => <PosterRailCard movie={item} onPress={openMovie} />}
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.railContent}
+                initialNumToRender={5}
+                maxToRenderPerBatch={6}
+                windowSize={4}
+                removeClippedSubviews
+                ListEmptyComponent={
+                  <View style={styles.emptyMoodRail}>
+                    <Text style={styles.emptyMoodText} allowFontScaling={false}>No titles available for this mood right now.</Text>
+                  </View>
+                }
+              />
+            )}
+          </View>
 
+          {premiumRails.map(rail => (
+            <View key={rail.id} style={styles.sectionWrap}>
+              <SectionHeader title={rail.title} subtitle={rail.subtitle} />
+              {rail.loading ? (
+                <RailSkeleton />
+              ) : (
+                <FlatList
+                  data={rail.movies}
+                  horizontal
+                  keyExtractor={item => `${rail.id}-${item.id}`}
+                  renderItem={({ item }) => <PosterRailCard movie={item} onPress={openMovie} />}
+                  showsHorizontalScrollIndicator={false}
+                  contentContainerStyle={styles.railContent}
+                  initialNumToRender={5}
+                  maxToRenderPerBatch={6}
+                  windowSize={4}
+                  removeClippedSubviews
+                />
+              )}
+            </View>
+          ))}
+
+          {bootLoading ? (
+            <View style={styles.bootLoaderRow}>
+              <ActivityIndicator size="small" color={Colors.accent.crimson} />
+            </View>
+          ) : null}
+
+          {watchlistItems.length > 0 ? (
+            <View style={styles.footerSpace} />
+          ) : null}
         </View>
-      </Animated.ScrollView>
+      </ScrollView>
     </View>
   );
 };
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: Colors.bg.void },
-  header: {
-    position: 'absolute', top: 0, left: 0, right: 0, zIndex: 100,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 20, paddingBottom: 14,
+  root: {
+    flex: 1,
+    backgroundColor: Colors.bg.void,
   },
-  headerTitleRow: {},
-  greeting: { fontSize: 10, fontFamily: Typography.fontPrimary, color: Colors.text.tertiary, textTransform: 'uppercase', letterSpacing: 0.6 },
-  headerWordmark: { fontSize: 18, fontFamily: Typography.fontPoppinsBold, color: Colors.text.primary, letterSpacing: 1.2, marginTop: 1 },
-  headerAI: { color: Colors.accent.crimson },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: Spacing.sm },
-  headerBtn: {
-    width: 36, height: 36, borderRadius: 18,
-    alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+  topHeader: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 20,
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: 'rgba(7,7,9,0.22)',
   },
-  orbGlow: {
-    width: 36, height: 36, borderRadius: 18,
-    alignItems: 'center', justifyContent: 'center',
-    shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 0 }, shadowOpacity: 0.4, shadowRadius: 10,
+  topGreeting: {
+    color: Colors.text.tertiary,
+    fontSize: 10,
+    fontFamily: Typography.fontMedium,
+    letterSpacing: 0.7,
+    textTransform: 'uppercase',
   },
-  avatarBtn: {},
-  avatar: {
-    width: 34, height: 34, borderRadius: 17,
-    backgroundColor: Colors.accent.crimsonMuted, borderWidth: 1.5, borderColor: Colors.accent.crimson,
-    alignItems: 'center', justifyContent: 'center',
+  topBrand: {
+    marginTop: 3,
+    color: Colors.text.primary,
+    fontSize: 19,
+    fontFamily: Typography.fontDisplay,
+    letterSpacing: 1.1,
   },
-  avatarText: { fontSize: 13, fontFamily: Typography.fontPoppinsBold, color: Colors.accent.crimson },
-  contentBody: { position: 'relative', marginTop: -Spacing.lg },
-  studioSec: { marginTop: Spacing.sm, marginBottom: Spacing.xs },
-  section: { marginTop: Spacing.lg },
-  carouselPad: { paddingHorizontal: 20, gap: 4 },
-  carouselPadTrend: { paddingHorizontal: 20, gap: 0, paddingLeft: 12 },
-  editorialCard: {
-    width: 195, height: 125, borderRadius: Radius.md, overflow: 'hidden',
-    backgroundColor: Colors.bg.surface, marginRight: Spacing.sm, position: 'relative',
-    borderWidth: 1, borderColor: 'rgba(255,255,255,0.06)',
+  topBrandAi: {
+    color: Colors.accent.crimson,
   },
-  editorialPoster: { ...StyleSheet.absoluteFillObject },
-  editorialGrad: { position: 'absolute', bottom: 0, left: 0, right: 0, height: 85 },
-  editorialMeta: { position: 'absolute', bottom: 10, left: 10, right: 10 },
-  aiMatchChip: {
-    flexDirection: 'row', alignItems: 'center', gap: 4,
-    backgroundColor: Colors.accent.crimsonMuted, borderRadius: Radius.full,
-    paddingHorizontal: 8, paddingVertical: 2, alignSelf: 'flex-start', marginBottom: 6,
+  topActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
   },
-  aiMatchText: { fontSize: 9, fontFamily: Typography.fontSemiBold, color: Colors.accent.crimson },
-  editorialTitle: { fontSize: 12, fontFamily: Typography.fontSemiBold, color: Colors.text.primary },
-  moodGrid: {
-    flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 8,
+  topIconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    backgroundColor: 'rgba(7,7,9,0.65)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  moodCard: {
-    width: (W - 48) / 2, borderRadius: Radius.md,
-    paddingLeft: 14, paddingRight: 10, paddingVertical: 14,
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderWidth: 1, borderColor: Colors.glass.border, overflow: 'hidden',
+  topAvatar: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: 'rgba(230,57,70,0.6)',
+    backgroundColor: 'rgba(230,57,70,0.16)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  moodAccentBar: { position: 'absolute', left: 0, top: 0, bottom: 0, width: 3 },
-  moodLabel: { fontSize: 12.5, fontFamily: Typography.fontSemiBold, color: Colors.text.primary, flex: 1, marginLeft: 0 },
-  moodContentRow: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: 6 },
-  moodIcon: { marginLeft: 2 },
+  topAvatarText: {
+    color: Colors.accent.crimson,
+    fontSize: 13,
+    fontFamily: Typography.fontDisplay,
+  },
+  scrollContent: {
+    paddingBottom: 118,
+  },
+  heroWrap: {
+    height: HERO_HEIGHT,
+    position: 'relative',
+    justifyContent: 'flex-end',
+  },
+  heroBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  heroSkeleton: {
+    height: HERO_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Colors.bg.deep,
+  },
+  heroContent: {
+    paddingHorizontal: 22,
+    paddingBottom: 28,
+    gap: 16,
+  },
+  heroLabel: {
+    color: Colors.text.secondary,
+    fontSize: 10,
+    fontFamily: Typography.fontMedium,
+    letterSpacing: 1.2,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  heroTitle: {
+    color: Colors.text.primary,
+    fontSize: 33,
+    fontFamily: Typography.fontDisplay,
+    letterSpacing: -0.7,
+    lineHeight: 37,
+  },
+  heroMeta: {
+    marginTop: 8,
+    color: Colors.text.secondary,
+    fontSize: 12,
+    fontFamily: Typography.fontMedium,
+  },
+  heroOverview: {
+    marginTop: 8,
+    color: '#D2D2E0',
+    fontSize: 13,
+    fontFamily: Typography.fontPrimary,
+    lineHeight: 20,
+    maxWidth: SCREEN_WIDTH * 0.9,
+  },
+  heroActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+  },
+  heroPrimaryBtn: {
+    minHeight: 40,
+    borderRadius: Radius.full,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: '#D9ECFA',
+  },
+  heroPrimaryBtnText: {
+    color: '#071018',
+    fontSize: 12,
+    fontFamily: Typography.fontSemiBold,
+  },
+  heroDisabledBtn: {
+    backgroundColor: 'rgba(255,255,255,0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+  },
+  heroDisabledBtnText: {
+    color: Colors.text.secondary,
+  },
+  heroSecondaryBtn: {
+    minHeight: 40,
+    borderRadius: Radius.full,
+    paddingHorizontal: 13,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.2)',
+    backgroundColor: 'rgba(7,7,9,0.55)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+  },
+  heroSecondaryBtnText: {
+    color: Colors.text.primary,
+    fontSize: 12,
+    fontFamily: Typography.fontSemiBold,
+  },
+  heroIndicators: {
+    marginTop: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 6,
+  },
+  heroDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(255,255,255,0.22)',
+  },
+  heroDotActive: {
+    width: 16,
+    backgroundColor: Colors.accent.crimson,
+  },
+  body: {
+    marginTop: 18,
+    gap: 24,
+  },
+  sectionWrap: {
+    gap: 12,
+  },
+  sectionHeader: {
+    paddingHorizontal: 20,
+    gap: 3,
+  },
+  sectionTitle: {
+    color: Colors.text.primary,
+    fontSize: 20,
+    fontFamily: Typography.fontDisplay,
+    letterSpacing: -0.3,
+  },
+  sectionSubtitle: {
+    color: Colors.text.secondary,
+    fontSize: 11,
+    fontFamily: Typography.fontPrimary,
+  },
+  railContent: {
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  posterCard: {
+    width: RAIL_CARD_WIDTH,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    backgroundColor: Colors.bg.surface,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.07)',
+    marginRight: 4,
+  },
+  posterImage: {
+    width: RAIL_CARD_WIDTH,
+    height: RAIL_CARD_HEIGHT,
+    backgroundColor: Colors.bg.surface,
+  },
+  posterGradient: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 78,
+  },
+  posterMeta: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 9,
+  },
+  posterTitle: {
+    color: Colors.text.primary,
+    fontSize: 12,
+    fontFamily: Typography.fontSemiBold,
+  },
+  posterSub: {
+    marginTop: 2,
+    color: Colors.text.secondary,
+    fontSize: 9.5,
+    fontFamily: Typography.fontPrimary,
+  },
+  posterRatingPill: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: Radius.sm,
+    borderWidth: 1,
+    borderColor: 'rgba(240,180,41,0.35)',
+    backgroundColor: 'rgba(7,7,9,0.88)',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+  },
+  posterRatingText: {
+    color: Colors.accent.gold,
+    fontSize: 10,
+    fontFamily: Typography.fontSemiBold,
+  },
+  continueCard: {
+    width: 256,
+    height: 144,
+    borderRadius: Radius.lg,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.09)',
+    backgroundColor: Colors.bg.surface,
+    marginRight: 8,
+  },
+  continueBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  continueGradient: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  continueMeta: {
+    position: 'absolute',
+    left: 12,
+    right: 12,
+    bottom: 20,
+  },
+  continueTitle: {
+    color: Colors.text.primary,
+    fontSize: 14,
+    fontFamily: Typography.fontSemiBold,
+  },
+  continueSub: {
+    marginTop: 3,
+    color: Colors.text.secondary,
+    fontSize: 11,
+    fontFamily: Typography.fontPrimary,
+  },
+  progressTrack: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    height: 4,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+  },
+  progressFill: {
+    height: 4,
+    backgroundColor: Colors.accent.crimson,
+  },
+  moodChipRow: {
+    paddingHorizontal: 20,
+    gap: 8,
+  },
+  moodChip: {
+    minHeight: 36,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.14)',
+    paddingHorizontal: 14,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moodChipSelected: {
+    borderColor: 'rgba(230,57,70,0.6)',
+    backgroundColor: 'rgba(230,57,70,0.2)',
+  },
+  moodChipLabel: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+    fontFamily: Typography.fontMedium,
+  },
+  moodChipLabelSelected: {
+    color: Colors.text.primary,
+  },
+  emptyMoodRail: {
+    width: SCREEN_WIDTH - 40,
+    paddingVertical: 30,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyMoodText: {
+    color: Colors.text.secondary,
+    fontSize: 12,
+    fontFamily: Typography.fontPrimary,
+  },
+  railSkeletonWrap: {
+    paddingHorizontal: 20,
+    gap: 10,
+  },
+  railSkeletonHeader: {
+    width: 170,
+    height: 10,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  railSkeletonRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  railSkeletonCard: {
+    width: RAIL_CARD_WIDTH,
+    height: RAIL_CARD_HEIGHT + 44,
+    borderRadius: Radius.lg,
+    backgroundColor: 'rgba(255,255,255,0.06)',
+  },
+  bootLoaderRow: {
+    paddingVertical: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerSpace: {
+    height: Spacing.base,
+  },
 });
 
 export default HomeScreen;

@@ -259,13 +259,14 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         matchedMovies = CURATED_MOVIES.filter(m => m.genre_ids.includes(35)).slice(0, 3);
         aiMessageContent = "⚡ **Quick AI Offline Mode Active.** While CineAI wakes our high-performance remote models, I've parsed your request locally! If you need something comforting, lighthearted, and beautifully shot that leaves you with a warm smile, these highly rated comedies and feel-good cinematic gems are exactly what you need tonight:";
       } else {
-        // General fallback
-        matchedMovies = CURATED_MOVIES.slice(0, 3);
+        // General fallback - shuffle to ensure high diversity and prevent Christopher Nolan repetition loop
+        const shuffled = [...CURATED_MOVIES].sort(() => Math.random() - 0.5);
+        matchedMovies = shuffled.slice(0, 3);
         aiMessageContent = "⚡ **Quick AI Offline Mode Active.** While CineAI wakes our high-performance remote models, I've parsed your request locally! Based on your cinematic mood query, I've filtered these legendary, highly acclaimed titles from our curated database to guarantee an extraordinary movie night:";
       }
 
       if (matchedMovies.length === 0) {
-        matchedMovies = CURATED_MOVIES.slice(0, 3);
+        matchedMovies = [...CURATED_MOVIES].sort(() => Math.random() - 0.5).slice(0, 3);
       }
 
       const fallbackAssistantMessage: ChatMessage = {

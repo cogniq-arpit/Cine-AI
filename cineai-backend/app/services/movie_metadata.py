@@ -69,7 +69,15 @@ class MovieMetadataService:
             "Plot": plot,
             "imdbRating": rating_str,
             "Director": director_str,
-            "Actors": actors_str
+            "Actors": actors_str,
+            "poster_path": f"https://image.tmdb.org/t/p/w500{poster_path}" if poster_path else None,
+            "backdrop_path": f"https://image.tmdb.org/t/p/w780{movie.get('backdrop_path')}" if movie.get('backdrop_path') else None,
+            "original_language": movie.get("original_language") or "en",
+            "vote_average": vote_average,
+            "vote_count": movie.get("vote_count") or 1000,
+            "genre_ids": movie.get("genre_ids") or ([g["id"] for g in genres] if genres else []),
+            "release_date": release_date or "2000-01-01",
+            "videos": movie.get("videos") or {"results": []}
         }
 
     async def fetch_by_imdb_id(self, imdb_id: str) -> Optional[Dict]:
@@ -96,7 +104,7 @@ class MovieMetadataService:
                 
                 # 2. Fetch full details including credits
                 detail_url = f"{self.base_url}movie/{tmdb_id}"
-                detail_params = {**base_params, "append_to_response": "credits"}
+                detail_params = {**base_params, "append_to_response": "credits,videos"}
                 detail_resp = await client.get(detail_url, headers=headers, params=detail_params, timeout=10.0)
                 if detail_resp.status_code != 200:
                     logger.error(f"TMDB details fetch returned status {detail_resp.status_code} for TMDB ID {tmdb_id}: {detail_resp.text}")
@@ -109,7 +117,7 @@ class MovieMetadataService:
                 logger.error(f"Failed calling TMDB API for IMDb ID {imdb_id}: {str(e)}")
                 return None
 
-    async def search_movies(self, query: str) -> List[Dict]:
+    async def search_movies(self, query: str, limit: int = 6) -> List[Dict]:
         """Searches movies from TMDB and resolves their IMDb IDs concurrently."""
         headers, base_params = self._get_auth_config()
         async with httpx.AsyncClient() as client:
@@ -123,8 +131,8 @@ class MovieMetadataService:
                     return []
                 
                 results = response.json().get("results", [])
-                # Take top 6 results to satisfy the user request cleanly and quickly
-                top_results = results[:6]
+                # Take top results to satisfy the request cleanly and quickly
+                top_results = results[:limit]
                 
                 # 2. Resolve complete metadata (including imdb_id) for top results concurrently
                 tasks = [
@@ -144,7 +152,7 @@ class MovieMetadataService:
                 logger.error(f"Failed searching TMDB API for query '{query}': {str(e)}")
                 return []
 
-    async def fetch_trending_movies(self) -> List[Dict]:
+    async def fetch_trending_movies(self, limit: int = 10) -> List[Dict]:
         """Fetches trending movies directly from TMDB."""
         headers, base_params = self._get_auth_config()
         async with httpx.AsyncClient() as client:
@@ -156,7 +164,7 @@ class MovieMetadataService:
                     return []
                 
                 results = response.json().get("results", [])
-                top_results = results[:10]  # Take top 10
+                top_results = results[:limit]  # Take top results
                 
                 tasks = [
                     self._fetch_details_by_tmdb_id(client, headers, base_params, item["id"])
@@ -174,7 +182,7 @@ class MovieMetadataService:
                 logger.error(f"Failed fetching TMDB trending movies: {str(e)}")
                 return []
 
-    async def fetch_popular_movies(self) -> List[Dict]:
+    async def fetch_popular_movies(self, limit: int = 10) -> List[Dict]:
         """Fetches popular movies directly from TMDB."""
         headers, base_params = self._get_auth_config()
         async with httpx.AsyncClient() as client:
@@ -186,7 +194,7 @@ class MovieMetadataService:
                     return []
                 
                 results = response.json().get("results", [])
-                top_results = results[:10]  # Take top 10
+                top_results = results[:limit]  # Take top results
                 
                 tasks = [
                     self._fetch_details_by_tmdb_id(client, headers, base_params, item["id"])
@@ -204,7 +212,7 @@ class MovieMetadataService:
                 logger.error(f"Failed fetching TMDB popular movies: {str(e)}")
                 return []
 
-    async def fetch_upcoming_movies(self) -> List[Dict]:
+    async def fetch_upcoming_movies(self, limit: int = 10) -> List[Dict]:
         """Fetches upcoming movies directly from TMDB."""
         headers, base_params = self._get_auth_config()
         async with httpx.AsyncClient() as client:
@@ -216,7 +224,7 @@ class MovieMetadataService:
                     return []
                 
                 results = response.json().get("results", [])
-                top_results = results[:10]  # Take top 10
+                top_results = results[:limit]  # Take top results
                 
                 tasks = [
                     self._fetch_details_by_tmdb_id(client, headers, base_params, item["id"])
@@ -234,7 +242,7 @@ class MovieMetadataService:
                 logger.error(f"Failed fetching TMDB upcoming movies: {str(e)}")
                 return []
 
-    async def fetch_top_rated_movies(self) -> List[Dict]:
+    async def fetch_top_rated_movies(self, limit: int = 10) -> List[Dict]:
         """Fetches top rated movies directly from TMDB."""
         headers, base_params = self._get_auth_config()
         async with httpx.AsyncClient() as client:
@@ -246,7 +254,7 @@ class MovieMetadataService:
                     return []
                 
                 results = response.json().get("results", [])
-                top_results = results[:10]  # Take top 10
+                top_results = results[:limit]  # Take top results
                 
                 tasks = [
                     self._fetch_details_by_tmdb_id(client, headers, base_params, item["id"])
@@ -268,7 +276,7 @@ class MovieMetadataService:
         """Helper to fetch single movie details by internal TMDB ID (used for concurrent resolution)."""
         try:
             detail_url = f"{self.base_url}movie/{tmdb_id}"
-            detail_params = {**base_params, "append_to_response": "credits"}
+            detail_params = {**base_params, "append_to_response": "credits,videos"}
             response = await client.get(detail_url, headers=headers, params=detail_params, timeout=5.0)
             if response.status_code == 200:
                 return response.json()
@@ -276,6 +284,39 @@ class MovieMetadataService:
         except Exception as e:
             logger.error(f"Error fetching TMDB detail during search resolution for TMDB ID {tmdb_id}: {str(e)}")
             return None
+
+    async def discover_movies(self, params: dict) -> List[Dict]:
+        """Queries TMDB discover endpoint directly with custom filters."""
+        headers, base_params = self._get_auth_config()
+        async with httpx.AsyncClient() as client:
+            try:
+                url = f"{self.base_url}discover/movie"
+                # Merge base params with input params
+                discover_params = {**base_params, **params}
+                response = await client.get(url, headers=headers, params=discover_params, timeout=10.0)
+                if response.status_code != 200:
+                    logger.error(f"TMDB discover returned status {response.status_code}: {response.text}")
+                    return []
+                
+                results = response.json().get("results", [])
+                limit = int(params.get("limit", 20))
+                top_results = results[:limit]
+                
+                tasks = [
+                    self._fetch_details_by_tmdb_id(client, headers, base_params, item["id"])
+                    for item in top_results
+                ]
+                detailed_responses = await asyncio.gather(*tasks, return_exceptions=True)
+                
+                output = []
+                for res in detailed_responses:
+                    if isinstance(res, dict) and res.get("imdb_id"):
+                        mapped = self._map_tmdb_to_unified_schema(res)
+                        output.append(mapped)
+                return output
+            except Exception as e:
+                logger.error(f"Failed querying TMDB discover: {str(e)}")
+                return []
 
 movie_metadata_service = MovieMetadataService()
 

@@ -15,7 +15,67 @@ import { getPosterUrl, getBackdropUrl } from '../../services/tmdbApi';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CARD_WIDTH = SCREEN_WIDTH * 0.42;
-const CARD_HEIGHT = CARD_WIDTH * 1.5;
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+const getLanguageLabel = (lang: string): string => {
+  const map: Record<string, string> = {
+    en: 'English',
+    hi: 'Hindi',
+    te: 'Telugu',
+    ta: 'Tamil',
+    ml: 'Malayalam',
+    kn: 'Kannada',
+    ko: 'Korean',
+    ja: 'Japanese',
+    es: 'Spanish',
+    fr: 'French',
+    de: 'German',
+    it: 'Italian',
+    zh: 'Chinese',
+  };
+  return map[lang.toLowerCase()] || lang.toUpperCase();
+};
+
+const getCountryLabel = (lang: string): string => {
+  const map: Record<string, string> = {
+    en: 'USA',
+    hi: 'India',
+    te: 'India',
+    ta: 'India',
+    ml: 'India',
+    kn: 'India',
+    ko: 'Korea',
+    ja: 'Japan',
+    es: 'Spain',
+    fr: 'France',
+    de: 'Germany',
+    it: 'Italy',
+    zh: 'China',
+  };
+  return map[lang.toLowerCase()] || 'International';
+};
+
+const getGenreNames = (genreIds: number[] | undefined): string => {
+  if (!genreIds || genreIds.length === 0) return 'Cinema';
+  const map: Record<number, string> = {
+    28: 'Action',
+    12: 'Adventure',
+    16: 'Anime',
+    35: 'Comedy',
+    80: 'Crime',
+    18: 'Drama',
+    9648: 'Mystery',
+    10749: 'Romance',
+    878: 'Sci-Fi',
+    27: 'Horror',
+    14: 'Fantasy',
+    53: 'Thriller',
+    36: 'History',
+    10402: 'Musical',
+    10751: 'Family',
+  };
+  return genreIds.map(id => map[id]).filter(Boolean).slice(0, 2).join(' • ');
+};
 
 interface MovieCardProps {
   movie: Movie;
@@ -71,9 +131,9 @@ export const MovieCard: React.FC<MovieCardProps> = ({
         />
         <View style={styles.featuredContent}>
           <View style={styles.ratingRow}>
-            <View style={styles.ratingBadge}>
+            <View style={styles.ratingBadgeFeatured}>
               <Ionicons name="star" size={10} color={Colors.gold} />
-              <Text style={styles.ratingBadgeText}>{movie.vote_average.toFixed(1)}</Text>
+              <Text style={styles.ratingBadgeTextFeatured}>{movie.vote_average.toFixed(1)}</Text>
             </View>
           </View>
           <Text style={styles.featuredTitle} numberOfLines={2}>{movie.title}</Text>
@@ -115,6 +175,10 @@ export const MovieCard: React.FC<MovieCardProps> = ({
   }
 
   // Portrait (default)
+  const year = movie.release_date ? movie.release_date.split('-')[0] : '—';
+  const country = getCountryLabel(movie.original_language || 'en');
+  const genres = getGenreNames(movie.genre_ids);
+
   return (
     <AnimatedPressable
       onPress={() => onPress(movie)}
@@ -133,19 +197,25 @@ export const MovieCard: React.FC<MovieCardProps> = ({
           colors={['transparent', 'rgba(10,10,15,0.85)']}
           style={styles.cardGradient}
         />
-        {showRating && (
-          <View style={styles.ratingBadgeContainer}>
-            <View style={styles.ratingBadge}>
-              <Ionicons name="star" size={10} color={Colors.gold} />
-              <Text style={styles.ratingBadgeText}>{movie.vote_average.toFixed(1)}</Text>
-            </View>
+        {showRating && movie.vote_average > 0 && (
+          <View style={styles.ratingBadge}>
+            <Ionicons name="star" size={8} color={Colors.gold} />
+            <Text style={styles.ratingText}>{movie.vote_average.toFixed(1)}</Text>
+          </View>
+        )}
+        {movie.original_language && (
+          <View style={styles.langBadge}>
+            <Text style={styles.langText}>{(movie.original_language).toUpperCase()}</Text>
           </View>
         )}
       </View>
       <View style={styles.cardContent}>
         <Text style={styles.cardTitle} numberOfLines={1}>{movie.title}</Text>
-        <Text style={styles.cardYear} numberOfLines={1}>
-          {movie.release_date?.split('-')[0] || '—'}
+        <Text style={styles.cardMeta} numberOfLines={1}>
+          {year} • {country}
+        </Text>
+        <Text style={styles.cardGenres} numberOfLines={1}>
+          {genres}
         </Text>
       </View>
     </AnimatedPressable>
@@ -161,6 +231,7 @@ const styles = StyleSheet.create({
     borderRadius: Radius.lg,
     overflow: 'hidden',
     backgroundColor: Colors.card,
+    position: 'relative',
   },
   cardGradient: {
     position: 'absolute',
@@ -169,25 +240,43 @@ const styles = StyleSheet.create({
     right: 0,
     height: 80,
   },
-  ratingBadgeContainer: {
-    position: 'absolute',
-    bottom: Spacing.sm,
-    left: Spacing.sm,
-  },
   ratingBadge: {
+    position: 'absolute',
+    top: Spacing.sm,
+    left: Spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 3,
-    backgroundColor: 'rgba(0,0,0,0.75)',
+    gap: 2,
+    backgroundColor: 'rgba(0,0,0,0.82)',
     paddingHorizontal: Spacing.sm,
     paddingVertical: 2,
-    borderRadius: Radius.full,
-    overflow: 'hidden',
+    borderRadius: Radius.xs,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,183,3,0.3)',
+    zIndex: 5,
   },
-  ratingBadgeText: {
+  ratingText: {
     color: Colors.gold,
-    fontSize: Typography.xs,
+    fontSize: Typography.xs - 2,
     fontFamily: 'Inter_600SemiBold',
+  },
+  langBadge: {
+    position: 'absolute',
+    top: Spacing.sm,
+    right: Spacing.sm,
+    backgroundColor: 'rgba(0,0,0,0.82)',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.xs,
+    borderWidth: 0.5,
+    borderColor: 'rgba(255,255,255,0.15)',
+    zIndex: 5,
+  },
+  langText: {
+    color: Colors.white,
+    fontSize: Typography.xs - 2.5,
+    fontFamily: 'Inter_600SemiBold',
+    letterSpacing: 0.3,
   },
   cardContent: {
     paddingTop: Spacing.xs + 2,
@@ -199,9 +288,15 @@ const styles = StyleSheet.create({
     fontFamily: 'Inter_600SemiBold',
     letterSpacing: 0.1,
   },
-  cardYear: {
+  cardMeta: {
     color: Colors.textMuted,
-    fontSize: Typography.xs,
+    fontSize: Typography.xs - 1.5,
+    fontFamily: 'Inter_400Regular',
+    marginTop: 2,
+  },
+  cardGenres: {
+    color: Colors.textSecondary,
+    fontSize: Typography.xs - 2,
     fontFamily: 'Inter_400Regular',
     marginTop: 1,
   },
@@ -235,6 +330,20 @@ const styles = StyleSheet.create({
   ratingRow: {
     flexDirection: 'row',
     marginBottom: Spacing.xs,
+  },
+  ratingBadgeFeatured: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'rgba(0,0,0,0.75)',
+    paddingHorizontal: Spacing.sm,
+    paddingVertical: 2,
+    borderRadius: Radius.full,
+  },
+  ratingBadgeTextFeatured: {
+    color: Colors.gold,
+    fontSize: Typography.xs,
+    fontFamily: 'Inter_600SemiBold',
   },
   featuredTitle: {
     color: Colors.white,

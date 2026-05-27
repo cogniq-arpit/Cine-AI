@@ -204,7 +204,20 @@ export const MovieDetailsScreen: React.FC = () => {
     );
   }
 
-  const trailer = movie.videos?.results?.find(v => v.type === 'Trailer' && v.site === 'YouTube');
+  const videos = movie.videos?.results || [];
+  let trailer = videos.find(
+    v => v.official === true && v.type === 'Trailer' && v.site === 'YouTube'
+  );
+  if (!trailer) {
+    trailer = videos.find(
+      v => v.official === true && v.type === 'Teaser' && v.site === 'YouTube'
+    );
+  }
+  if (!trailer) {
+    trailer = videos.find(
+      v => v.official === true && v.type === 'Clip' && v.site === 'YouTube'
+    );
+  }
   const duration = movie.runtime ? `${Math.floor(movie.runtime / 60)}h ${movie.runtime % 60}m` : '';
   const releaseYear = movie.release_date ? new Date(movie.release_date).getFullYear().toString() : '';
   const director = movie.credits?.crew?.find(c => c.job === 'Director')?.name || 'Unknown';
@@ -259,20 +272,31 @@ export const MovieDetailsScreen: React.FC = () => {
           </Animated.View>
 
           {/* Action video pulse button */}
-          {trailer && (
-            <Pressable
-              style={({ pressed }) => [styles.playOrb, pressed && { transform: [{ scale: 0.95 }] }]}
-              onPress={() => {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-                Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`).catch(() => {});
-              }}
-            >
-              <View style={styles.playOrbInner}>
-                <Ionicons name="play" size={28} color={Colors.text.onAccent} style={{ marginLeft: 3 }} />
-              </View>
-              <Text style={styles.playText} allowFontScaling={false}>Watch Trailer</Text>
-            </Pressable>
-          )}
+          <Pressable
+            style={({ pressed }) => [
+              styles.playOrb, 
+              pressed && trailer && { transform: [{ scale: 0.95 }] },
+              !trailer && styles.playOrbDisabled
+            ]}
+            disabled={!trailer}
+            onPress={() => {
+              if (!trailer) return;
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+              Linking.openURL(`https://www.youtube.com/watch?v=${trailer.key}`).catch(() => {});
+            }}
+          >
+            <View style={[styles.playOrbInner, !trailer && styles.playOrbInnerDisabled]}>
+              <Ionicons 
+                name={trailer ? "play" : "play-outline"} 
+                size={28} 
+                color={trailer ? Colors.text.onAccent : Colors.text.tertiary} 
+                style={trailer ? { marginLeft: 3 } : {}} 
+              />
+            </View>
+            <Text style={[styles.playText, !trailer && styles.playTextDisabled]} allowFontScaling={false}>
+              {trailer ? "Watch Trailer" : "Trailer Unavailable"}
+            </Text>
+          </Pressable>
 
           {/* Bleeding Editorial Title Overlay */}
           <View style={styles.titleArea}>
@@ -410,6 +434,9 @@ const styles = StyleSheet.create({
   rightPills: { flexDirection: 'row', gap: 8 },
   heroContainer: { height: BACKDROP_HEIGHT, position: 'relative', justifyContent: 'center', alignItems: 'center' },
   playOrb: { alignItems: 'center', gap: 8, zIndex: 10, marginTop: -40 },
+  playOrbDisabled: {
+    opacity: 0.75,
+  },
   playOrbInner: {
     width: 60, height: 60, borderRadius: 30,
     backgroundColor: Colors.accent.crimson, borderWidth: 1, borderColor: Colors.accent.crimsonLight,
@@ -417,7 +444,16 @@ const styles = StyleSheet.create({
     shadowColor: Colors.accent.crimson, shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.6, shadowRadius: 20, elevation: 8,
   },
+  playOrbInnerDisabled: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderColor: 'rgba(255,255,255,0.15)',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
   playText: { fontSize: 13, fontFamily: 'Poppins_700Bold', color: Colors.text.primary, letterSpacing: 0.5 },
+  playTextDisabled: {
+    color: Colors.text.tertiary,
+  },
   titleArea: {
     position: 'absolute', bottom: 0, left: 0, right: 0,
     paddingHorizontal: 24, paddingBottom: 16,

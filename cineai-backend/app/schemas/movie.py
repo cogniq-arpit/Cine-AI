@@ -39,3 +39,11 @@ class MovieDetailResponse(BaseModel):
     imdbRating: Optional[str] = None
     Director: Optional[str] = None
     Actors: Optional[str] = None
+    poster_path: Optional[str] = None
+    backdrop_path: Optional[str] = None
+    original_language: Optional[str] = None
+    vote_average: Optional[float] = None
+    vote_count: Optional[int] = None
+    genre_ids: Optional[List[int]] = None
+    release_date: Optional[str] = None
+    videos: Optional[dict] = None
