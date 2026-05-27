@@ -138,7 +138,13 @@ export const WatchlistScreen: React.FC = () => {
           renderItem={({ item }) => (
             <WatchlistCard
               item={item}
-              onPress={() => navigation.navigate('MovieDetails', { movieId: item.movie_id })}
+              onPress={() => navigation.navigate('MovieDetails', {
+                movieId: item.movie_id,
+                imdbId: item.movie_data.imdb_id || item.movie_data.imdbID,
+                movieTitle: item.movie_data.title,
+                releaseYear: item.movie_data.release_date?.slice(0, 4),
+                movie: item.movie_data,
+              })}
               onRemove={() => handleRemove(item.movie_id)}
             />
           )}

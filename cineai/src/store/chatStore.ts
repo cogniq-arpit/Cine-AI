@@ -32,7 +32,7 @@ const extractAndFetchMovies = async (text: string): Promise<Movie[]> => {
     // Basic regex to find movie-like titles quoted or mentioned
     const quotes = text.match(/"([^"]+)"|'([^']+)'/g);
     if (quotes) {
-      const titles = quotes.map(q => q.replace(/['"]/g, '').trim()).slice(0, 4);
+      const titles = quotes.map(q => q.replace(/['"]/g, '').trim()).slice(0, 12);
       for (const title of titles) {
         if (title.length > 1) {
           const res = await tmdbApi.searchMovies(title, 1);
@@ -141,7 +141,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
         if (parsed && typeof parsed === 'object' && parsed.message) {
           const queries = Array.isArray(parsed.movieSearchQueries) ? parsed.movieSearchQueries : [];
           const movies: Movie[] = [];
-          for (const title of queries.slice(0, 5)) {
+          for (const title of queries.slice(0, 12)) {
             if (title?.trim()) {
               try {
                 const res = await tmdbApi.searchMovies(title.trim(), 1);
@@ -248,25 +248,25 @@ export const useChatStore = create<ChatStore>((set, get) => ({
       // Match movies in our CURATED_MOVIES database
       if (query.includes('sci-fi') || query.includes('science') || query.includes('space') || query.includes('future') || query.includes('planet')) {
         tag = 'sci-fi';
-        matchedMovies = CURATED_MOVIES.filter(m => m.genre_ids.includes(878)).slice(0, 3);
+        matchedMovies = CURATED_MOVIES.filter(m => m.genre_ids.includes(878)).slice(0, 8);
         aiMessageContent = "⚡ **Quick AI Offline Mode Active.** While CineAI wakes our high-performance remote models, I've parsed your request locally! For a mind-bending, epic science-fiction match, these absolute masterpieces from our curated catalog will blow you away: 'Arrival' and 'Interstellar' are standard-setting cinematic achievements that explore profound existential questions. Here is your quick curated mood match:";
       } else if (query.includes('thrill') || query.includes('dark') || query.includes('tense') || query.includes('psychological') || query.includes('crime') || query.includes('murder')) {
         tag = 'thriller';
-        matchedMovies = CURATED_MOVIES.filter(m => m.genre_ids.includes(53) || m.genre_ids.includes(80)).slice(0, 3);
+        matchedMovies = CURATED_MOVIES.filter(m => m.genre_ids.includes(53) || m.genre_ids.includes(80)).slice(0, 8);
         aiMessageContent = "⚡ **Quick AI Offline Mode Active.** While CineAI wakes our high-performance remote models, I've parsed your request locally! If you are looking for a dark, tense, and psychological journey that grips you from the first minute, these masterfully paced suspense masterpieces will absolutely stun you. Check out these highly matching films:";
       } else if (query.includes('feel') || query.includes('comedy') || query.includes('happy') || query.includes('fun') || query.includes('laugh')) {
         tag = 'feel-good';
-        matchedMovies = CURATED_MOVIES.filter(m => m.genre_ids.includes(35)).slice(0, 3);
+        matchedMovies = CURATED_MOVIES.filter(m => m.genre_ids.includes(35)).slice(0, 8);
         aiMessageContent = "⚡ **Quick AI Offline Mode Active.** While CineAI wakes our high-performance remote models, I've parsed your request locally! If you need something comforting, lighthearted, and beautifully shot that leaves you with a warm smile, these highly rated comedies and feel-good cinematic gems are exactly what you need tonight:";
       } else {
         // General fallback - shuffle to ensure high diversity and prevent Christopher Nolan repetition loop
         const shuffled = [...CURATED_MOVIES].sort(() => Math.random() - 0.5);
-        matchedMovies = shuffled.slice(0, 3);
+        matchedMovies = shuffled.slice(0, 8);
         aiMessageContent = "⚡ **Quick AI Offline Mode Active.** While CineAI wakes our high-performance remote models, I've parsed your request locally! Based on your cinematic mood query, I've filtered these legendary, highly acclaimed titles from our curated database to guarantee an extraordinary movie night:";
       }
 
       if (matchedMovies.length === 0) {
-        matchedMovies = [...CURATED_MOVIES].sort(() => Math.random() - 0.5).slice(0, 3);
+        matchedMovies = [...CURATED_MOVIES].sort(() => Math.random() - 0.5).slice(0, 8);
       }
 
       const fallbackAssistantMessage: ChatMessage = {

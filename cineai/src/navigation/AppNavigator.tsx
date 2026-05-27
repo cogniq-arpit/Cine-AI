@@ -17,8 +17,6 @@ import Animated, {
   withSpring,
   withTiming,
   withSequence,
-  interpolate,
-  Extrapolate,
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
@@ -26,6 +24,7 @@ import { Colors, Motion, Radius } from '../constants/theme';
 
 // ─── Screen Imports ────────────────────────────────────────────────────────
 import { HomeScreen } from '../screens/main/HomeScreen';
+import { ExploreScreen } from '../screens/main/ExploreScreen';
 import { SearchScreen } from '../screens/main/SearchScreen';
 import { AIChatScreen } from '../screens/main/AIChatScreen';
 import { WatchlistScreen } from '../screens/main/WatchlistScreen';
@@ -108,7 +107,7 @@ const tabStyles = StyleSheet.create({
     alignItems: 'center',
     gap: 3,
     paddingTop: 6,
-    width: 68,
+    width: 62,
     minHeight: 52,
   },
   label: {
@@ -141,36 +140,13 @@ const AITabButton: React.FC<{ focused: boolean; onPress: () => void }> = ({
   onPress,
 }) => {
   const scale = useSharedValue(1);
-  const glowOpacity = useSharedValue(focused ? 1 : 0.4);
-  const ringScale = useSharedValue(1);
 
   const containerStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));
 
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: glowOpacity.value,
-  }));
-
-  React.useEffect(() => {
-    if (focused) {
-      glowOpacity.value = withTiming(1, { duration: 250 });
-      // Subtle breathing ring animation
-      const pulse = () => {
-        ringScale.value = withSequence(
-          withTiming(1.15, { duration: 1200 }),
-          withTiming(1, { duration: 1200 })
-        );
-      };
-      pulse();
-    } else {
-      glowOpacity.value = withTiming(0.4, { duration: 200 });
-      ringScale.value = withSpring(1, Motion.springs.gentle);
-    }
-  }, [focused]);
-
   const handlePressIn = () => {
-    scale.value = withSpring(0.88, Motion.springs.snappy);
+    scale.value = withSpring(0.94, Motion.springs.snappy);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   };
 
@@ -180,8 +156,6 @@ const AITabButton: React.FC<{ focused: boolean; onPress: () => void }> = ({
 
   return (
     <Animated.View style={[aiTabStyles.outerContainer, containerStyle]}>
-      {/* Glow ring */}
-      <Animated.View style={[aiTabStyles.glowRing, glowStyle]} />
       <Pressable
         onPress={onPress}
         onPressIn={handlePressIn}
@@ -191,8 +165,8 @@ const AITabButton: React.FC<{ focused: boolean; onPress: () => void }> = ({
         accessibilityLabel="CineAI Chat"
       >
         <Ionicons
-          name="sparkles"
-          size={11}
+          name={focused ? 'sparkles' : 'sparkles-outline'}
+          size={13}
           color={focused ? Colors.text.onAccent : Colors.accent.crimsonLight}
         />
         <Text
@@ -212,15 +186,6 @@ const aiTabStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  glowRing: {
-    position: 'absolute',
-    width: 92,
-    height: 36,
-    borderRadius: 18,
-    borderWidth: 1.2,
-    borderColor: Colors.accent.crimson,
-    backgroundColor: 'transparent',
-  },
   btn: {
     flexDirection: 'row',
     width: 82,
@@ -230,20 +195,12 @@ const aiTabStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1.5,
-    borderColor: Colors.accent.crimsonMuted,
-    shadowColor: Colors.accent.crimson,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.25,
-    shadowRadius: 8,
-    elevation: 8,
+    borderColor: 'rgba(230,57,70,0.34)',
     gap: 4,
   },
   btnFocused: {
     backgroundColor: Colors.accent.crimson,
     borderColor: Colors.accent.crimsonLight,
-    shadowOpacity: 0.5,
-    shadowRadius: 12,
-    elevation: 12,
   },
   btnText: {
     fontSize: 9,
@@ -310,14 +267,14 @@ const MainTabNavigator: React.FC = () => {
         }}
       />
       <Tab.Screen
-        name="Search"
-        component={SearchScreen}
+        name="Explore"
+        component={ExploreScreen}
         options={{
           tabBarIcon: ({ focused }) => (
             <TabIcon
-              icon="search-outline"
-              iconFocused="search"
-              label="Search"
+              icon="compass-outline"
+              iconFocused="compass"
+              label="Explore"
               focused={focused}
             />
           ),
@@ -420,6 +377,14 @@ const RootNavigator: React.FC = () => {
       ) : (
         <>
           <RootStack.Screen name="Main" component={MainTabNavigator} />
+          <RootStack.Screen
+            name="Search"
+            component={SearchScreen}
+            options={{
+              animation: 'slide_from_right',
+              contentStyle: { backgroundColor: Colors.bg.void },
+            }}
+          />
           <RootStack.Screen
             name="MovieDetails"
             component={MovieDetailsScreen}

@@ -1,29 +1,22 @@
-/**
- * CineAI V3 — LoginScreen
- * Premium glass-card auth experience with floating labels.
- */
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  ScrollView,
-  Pressable,
+  ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
-  Dimensions,
-  TextInput,
-  ActivityIndicator,
+  Pressable,
+  ScrollView,
   StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from 'react-native';
 import Animated, {
-  useSharedValue,
-  useAnimatedStyle,
-  withTiming,
-  withSpring,
-  withDelay,
-  interpolate,
   Easing,
+  useAnimatedStyle,
+  useSharedValue,
+  withDelay,
+  withTiming,
 } from 'react-native-reanimated';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Image } from 'expo-image';
@@ -31,231 +24,79 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { Colors, Typography, Spacing, Radius, Motion } from '../../constants/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { Colors, Radius, Typography } from '../../constants/theme';
 import { useAuthStore } from '../../store/authStore';
 import type { AuthStackParamList } from '../../types';
+import { AuthInput } from './components/AuthInput';
+import { AUTH_BACKDROPS } from './constants';
 
-const { width: W, height: H } = Dimensions.get('window');
 type LoginNav = NativeStackNavigationProp<AuthStackParamList, 'Login'>;
 
-// ─── Floating Label Input ──────────────────────────────────────────────────
-interface FloatingInputProps {
-  label: string;
-  value: string;
-  onChangeText: (t: string) => void;
-  icon: React.ComponentProps<typeof Ionicons>['name'];
-  secureTextEntry?: boolean;
-  keyboardType?: TextInput['props']['keyboardType'];
-  autoCapitalize?: TextInput['props']['autoCapitalize'];
-  returnKeyType?: TextInput['props']['returnKeyType'];
-  onSubmitEditing?: () => void;
-  blurOnSubmit?: boolean;
-  inputRef?: React.RefObject<TextInput | null>;
-}
-
-const FloatingInput: React.FC<FloatingInputProps> = ({
-  label,
-  value,
-  onChangeText,
-  icon,
-  secureTextEntry,
-  keyboardType = 'default',
-  autoCapitalize = 'none',
-  returnKeyType,
-  onSubmitEditing,
-  blurOnSubmit,
-  inputRef,
-}) => {
-  const [isFocused, setIsFocused] = useState(false);
-  const [isVisible, setIsVisible] = useState(!secureTextEntry);
-  const labelAnim = useSharedValue(value ? 1 : 0);
-  const borderAnim = useSharedValue(0);
-  const glowAnim = useSharedValue(0);
-
-  const labelStyle = useAnimatedStyle(() => ({
-    transform: [
-      { translateY: interpolate(labelAnim.value, [0, 1], [0, -26]) },
-      { scale: interpolate(labelAnim.value, [0, 1], [1, 0.82]) },
-    ],
-    color: isFocused ? Colors.accent.crimson : Colors.text.tertiary,
-  }));
-
-  const borderStyle = useAnimatedStyle(() => ({
-    borderColor: `rgba(230,57,70,${borderAnim.value})`,
-  }));
-
-  const glowStyle = useAnimatedStyle(() => ({
-    opacity: glowAnim.value,
-  }));
-
-  const handleFocus = () => {
-    setIsFocused(true);
-    labelAnim.value = withSpring(1, Motion.springs.gentle);
-    borderAnim.value = withTiming(0.7, { duration: 200 });
-    glowAnim.value = withTiming(1, { duration: 200 });
-  };
-
-  const handleBlur = () => {
-    setIsFocused(false);
-    if (!value) labelAnim.value = withSpring(0, Motion.springs.gentle);
-    borderAnim.value = withTiming(0, { duration: 200 });
-    glowAnim.value = withTiming(0, { duration: 200 });
-  };
-
-  useEffect(() => {
-    if (value) labelAnim.value = withSpring(1, Motion.springs.gentle);
-  }, [value]);
-
-  return (
-    <View style={inputStyles.wrapper}>
-      {/* Glow effect */}
-      <Animated.View style={[inputStyles.glow, glowStyle]} />
-
-      {/* Main container */}
-      <Animated.View style={[inputStyles.container, borderStyle]}>
-        {/* Icon */}
-        <Ionicons
-          name={icon}
-          size={18}
-          color={isFocused ? Colors.accent.crimson : Colors.text.tertiary}
-          style={inputStyles.icon}
-        />
-
-        {/* Float label */}
-        <View style={inputStyles.inputArea}>
-          <Animated.Text style={[inputStyles.label, labelStyle]} allowFontScaling={false}>
-            {label}
-          </Animated.Text>
-          <TextInput
-            ref={inputRef}
-            style={inputStyles.input}
-            value={value}
-            onChangeText={onChangeText}
-            onFocus={handleFocus}
-            onBlur={handleBlur}
-            secureTextEntry={secureTextEntry && !isVisible}
-            keyboardType={keyboardType}
-            autoCapitalize={autoCapitalize}
-            returnKeyType={returnKeyType}
-            onSubmitEditing={onSubmitEditing}
-            blurOnSubmit={blurOnSubmit}
-            placeholderTextColor="transparent"
-            selectionColor={Colors.accent.crimson}
-            cursorColor={Colors.accent.crimson}
-            allowFontScaling={false}
-          />
-        </View>
-
-        {/* Visibility toggle */}
-        {secureTextEntry && (
-          <Pressable onPress={() => setIsVisible(v => !v)} style={inputStyles.visBtn}>
-            <Ionicons
-              name={isVisible ? 'eye-outline' : 'eye-off-outline'}
-              size={18}
-              color={Colors.text.tertiary}
-            />
-          </Pressable>
-        )}
-      </Animated.View>
-    </View>
-  );
-};
-
-const inputStyles = StyleSheet.create({
-  wrapper: {
-    marginBottom: 20,
-    position: 'relative',
+const socialRows = [
+  {
+    id: 'apple',
+    icon: 'logo-apple' as React.ComponentProps<typeof Ionicons>['name'],
+    title: 'Continue with Apple',
+    soon: 'Soon',
   },
-  glow: {
-    position: 'absolute',
-    inset: -4,
-    borderRadius: Radius.lg + 4,
-    backgroundColor: Colors.accent.crimsonGlow,
-    opacity: 0,
+  {
+    id: 'google',
+    icon: 'logo-google' as React.ComponentProps<typeof Ionicons>['name'],
+    title: 'Continue with Google',
+    soon: 'Soon',
   },
-  container: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.glass.subtle,
-    borderRadius: Radius.lg,
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-    paddingHorizontal: 16,
-    paddingVertical: 16,
-    minHeight: 60,
-    position: 'relative',
-    overflow: 'hidden',
+  {
+    id: 'facebook',
+    icon: 'logo-facebook' as React.ComponentProps<typeof Ionicons>['name'],
+    title: 'Continue with Facebook',
+    soon: 'Soon',
   },
-  icon: {
-    marginRight: 12,
-    marginTop: 4,
-  },
-  inputArea: {
-    flex: 1,
-    justifyContent: 'center',
-    position: 'relative',
-    minHeight: 36,
-  },
-  label: {
-    position: 'absolute',
-    top: 8,
-    left: 0,
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    transformOrigin: 'left center',
-  },
-  input: {
-    fontSize: 15,
-    fontFamily: 'Inter_400Regular',
-    color: Colors.text.primary,
-    paddingTop: 14,
-    paddingBottom: 0,
-  },
-  visBtn: {
-    padding: 4,
-  },
-});
+] as const;
 
-// ─── Main Login Screen ─────────────────────────────────────────────────────
 export const LoginScreen: React.FC = () => {
   const navigation = useNavigation<LoginNav>();
-  const { signIn, isLoading } = useAuthStore();
+  const insets = useSafeAreaInsets();
+  const { signIn, signInAsGuest, isLoading } = useAuthStore();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const passwordRef = useRef<TextInput>(null);
 
-  // Entrance animations
-  const cardY = useSharedValue(40);
-  const cardOpacity = useSharedValue(0);
-  const backdropOpacity = useSharedValue(0);
-
-  const cardStyle = useAnimatedStyle(() => ({
-    opacity: cardOpacity.value,
-    transform: [{ translateY: cardY.value }],
-  }));
-  const backdropStyle = useAnimatedStyle(() => ({ opacity: backdropOpacity.value }));
+  const fade = useSharedValue(0);
+  const slide = useSharedValue(16);
 
   useEffect(() => {
-    backdropOpacity.value = withTiming(1, { duration: 800, easing: Easing.out(Easing.cubic) });
-    cardOpacity.value = withDelay(300, withTiming(1, { duration: 600 }));
-    cardY.value = withDelay(300, withSpring(0, Motion.springs.gentle));
-  }, []);
+    fade.value = withDelay(80, withTiming(1, { duration: 420 }));
+    slide.value = withDelay(80, withTiming(0, { duration: 420, easing: Easing.out(Easing.cubic) }));
+  }, [fade, slide]);
+
+  const panelStyle = useAnimatedStyle(() => ({
+    opacity: fade.value,
+    transform: [{ translateY: slide.value }],
+  }));
 
   const handleSignIn = async () => {
-    if (!identifier.trim() || !password) {
-      setError('Please fill in all fields');
+    if (!identifier.trim() || !password.trim()) {
+      setError('Please enter your email and password.');
       return;
     }
+
     setError('');
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     try {
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       await signIn(identifier.trim(), password);
     } catch (e: any) {
+      const detail = e?.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Unable to sign in right now.');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error).catch(() => {});
-      setError(e?.response?.data?.detail || 'Invalid credentials. Please try again.');
     }
+  };
+
+  const handleGuest = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+    signInAsGuest();
   };
 
   return (
@@ -265,130 +106,109 @@ export const LoginScreen: React.FC = () => {
     >
       <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-      {/* Cinematic background */}
-      <Animated.View style={[StyleSheet.absoluteFill, backdropStyle]}>
-        <Image
-          source={{ uri: 'https://image.tmdb.org/t/p/w780/gEU2QniE6E77NI6lCU6MxlNBvIx.jpg' }}
-          style={StyleSheet.absoluteFill}
-          contentFit="cover"
-        />
-        <LinearGradient
-          colors={['rgba(7,7,9,0.5)', 'rgba(7,7,9,0.75)', Colors.bg.void]}
-          locations={[0, 0.4, 0.85]}
-          style={StyleSheet.absoluteFill}
-        />
-      </Animated.View>
+      <Image source={{ uri: AUTH_BACKDROPS.login[0] }} style={StyleSheet.absoluteFill} contentFit="cover" />
+      <LinearGradient
+        colors={['rgba(8,11,18,0.36)', 'rgba(8,11,18,0.8)', '#070709']}
+        locations={[0, 0.5, 0.9]}
+        style={StyleSheet.absoluteFill}
+      />
 
-      {/* Back button */}
-      <Pressable style={styles.backBtn} onPress={() => navigation.goBack()}>
+      <Pressable
+        style={[styles.backBtn, { top: insets.top + 8 }]}
+        onPress={() => navigation.goBack()}
+        hitSlop={12}
+      >
         <View style={styles.backPill}>
           <Ionicons name="chevron-back" size={18} color={Colors.text.primary} />
         </View>
       </Pressable>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.scrollContent, { paddingBottom: insets.bottom + 22 }]}
       >
-        <Animated.View style={[styles.card, cardStyle]}>
-          {/* Header */}
-          <View style={styles.cardHeader}>
-            <View style={styles.wordmarkSmall}>
-              <Text style={styles.wordmarkCine} allowFontScaling={false}>CINE</Text>
-              <View style={styles.aiPillSmall}>
-                <Text style={styles.wordmarkAI} allowFontScaling={false}>AI</Text>
-              </View>
-            </View>
-            <Text style={styles.title} allowFontScaling={false}>Welcome back</Text>
-            <Text style={styles.subtitle} allowFontScaling={false}>
-              Sign in to continue your cinematic journey
-            </Text>
-          </View>
+        <Animated.View style={[styles.panel, panelStyle]}>
+          <Text style={styles.kicker} allowFontScaling={false}>WELCOME BACK</Text>
+          <Text style={styles.title} allowFontScaling={false}>Sign in to your cinematic profile.</Text>
+          <Text style={styles.subtitle} allowFontScaling={false}>
+            Sync your watchlist, AI history, and personalized rails across devices.
+          </Text>
 
-          {/* Error */}
-          {!!error && (
+          {!!error ? (
             <View style={styles.errorBox}>
-              <Ionicons name="alert-circle-outline" size={16} color={Colors.semantic.error} />
+              <Ionicons name="alert-circle-outline" size={15} color={Colors.semantic.error} />
               <Text style={styles.errorText} allowFontScaling={false}>{error}</Text>
             </View>
-          )}
+          ) : null}
 
-          {/* Inputs */}
-          <FloatingInput
+          <AuthInput
             label="Email or Username"
             value={identifier}
             onChangeText={setIdentifier}
             icon="person-outline"
             keyboardType="email-address"
+            autoComplete="email"
             returnKeyType="next"
             onSubmitEditing={() => passwordRef.current?.focus()}
-            blurOnSubmit={false}
           />
-          <FloatingInput
+          <AuthInput
             label="Password"
             value={password}
             onChangeText={setPassword}
             icon="lock-closed-outline"
             secureTextEntry
+            autoComplete="password"
             returnKeyType="done"
             onSubmitEditing={handleSignIn}
             inputRef={passwordRef}
           />
 
-          {/* Forgot password */}
-          <Pressable
-            style={styles.forgotBtn}
-            onPress={() => navigation.navigate('ForgotPassword')}
-          >
-            <Ionicons name="key-outline" size={14} color={Colors.accent.crimson} />
-            <Text style={styles.forgotText} allowFontScaling={false}>
-              Forgot password?
-            </Text>
+          <Pressable style={styles.inlineLink} onPress={() => navigation.navigate('ForgotPassword')}>
+            <Text style={styles.inlineLinkText} allowFontScaling={false}>Forgot password?</Text>
           </Pressable>
 
-          {/* Sign In Button */}
-          <Pressable
-            onPress={handleSignIn}
-            disabled={isLoading}
-            style={({ pressed }) => [styles.signInBtn, pressed && styles.btnPressed]}
-          >
-            <LinearGradient
-              colors={[Colors.accent.crimsonLight, Colors.accent.crimson]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={styles.btnGradient}
-            >
+          <Pressable style={({ pressed }) => [styles.submitBtn, pressed && styles.submitPressed]} onPress={handleSignIn} disabled={isLoading}>
+            <LinearGradient colors={['#DCEBFF', '#B8D3FF']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.submitGradient}>
               {isLoading ? (
-                <ActivityIndicator size="small" color={Colors.text.onAccent} />
+                <ActivityIndicator size="small" color="#0B1526" />
               ) : (
-                <View style={styles.btnContent}>
-                  <Ionicons name="log-in-outline" size={18} color={Colors.text.onAccent} />
-                  <Text style={styles.signInText} allowFontScaling={false}>Sign In</Text>
-                </View>
+                <>
+                  <Ionicons name="arrow-forward" size={14} color="#0B1526" />
+                  <Text style={styles.submitText} allowFontScaling={false}>Continue</Text>
+                </>
               )}
             </LinearGradient>
           </Pressable>
 
-          {/* Divider */}
           <View style={styles.dividerRow}>
-            <View style={styles.dividerLine} />
-            <Text style={styles.dividerText} allowFontScaling={false}>or</Text>
-            <View style={styles.dividerLine} />
+            <View style={styles.divider} />
+            <Text style={styles.dividerText} allowFontScaling={false}>social sign-in</Text>
+            <View style={styles.divider} />
           </View>
 
-          {/* Sign up link */}
-          <Pressable
-            style={styles.signupRow}
-            onPress={() => navigation.navigate('SignUp')}
-          >
-            <Ionicons name="person-add-outline" size={15} color={Colors.accent.crimson} />
-            <Text style={styles.signupPrompt} allowFontScaling={false}>
-              Don't have an account?{' '}
-            </Text>
-            <Text style={styles.signupLink} allowFontScaling={false}>
-              Create one
-            </Text>
+          <View style={styles.socialStack}>
+            {socialRows.map(item => (
+              <Pressable key={item.id} style={styles.socialGhostBtn}>
+                <View style={styles.socialIconChip}>
+                  <Ionicons name={item.icon} size={15} color="#DCE8FB" />
+                </View>
+                <Text style={styles.socialLabel} allowFontScaling={false}>{item.title}</Text>
+                <View style={styles.socialSoonPill}>
+                  <Text style={styles.socialSoon} allowFontScaling={false}>{item.soon}</Text>
+                </View>
+              </Pressable>
+            ))}
+          </View>
+
+          <Pressable style={styles.guestBtn} onPress={handleGuest}>
+            <Ionicons name="sparkles-outline" size={14} color="#D1DDF0" />
+            <Text style={styles.guestText} allowFontScaling={false}>Continue as Guest</Text>
+          </Pressable>
+
+          <Pressable style={styles.switchRow} onPress={() => navigation.navigate('SignUp')}>
+            <Text style={styles.switchPrompt} allowFontScaling={false}>New to CineAI?</Text>
+            <Text style={styles.switchLink} allowFontScaling={false}> Create account</Text>
           </Pressable>
         </Animated.View>
       </ScrollView>
@@ -401,174 +221,196 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: Colors.bg.void,
   },
+  backBtn: {
+    position: 'absolute',
+    left: 20,
+    zIndex: 20,
+  },
+  backPill: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    borderWidth: 1,
+    borderColor: 'rgba(220,236,255,0.25)',
+    backgroundColor: 'rgba(9,14,24,0.68)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   scrollContent: {
     flexGrow: 1,
     justifyContent: 'flex-end',
     paddingHorizontal: 20,
-    paddingBottom: 40,
-    paddingTop: 100,
+    paddingTop: 92,
   },
-  backBtn: {
-    position: 'absolute',
-    top: 56,
-    left: 20,
-    zIndex: 10,
-  },
-  backPill: {
-    backgroundColor: Colors.glass.medium,
-    borderRadius: Radius.full,
-    width: 40,
-    height: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: Colors.glass.border,
-  },
-  card: {
-    backgroundColor: 'rgba(13,13,18,0.85)',
+  panel: {
     borderRadius: Radius['2xl'],
     borderWidth: 1,
-    borderColor: Colors.glass.border,
-    padding: 28,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 20 },
-    shadowOpacity: 0.5,
-    shadowRadius: 40,
-    elevation: 20,
+    borderColor: 'rgba(220,235,255,0.16)',
+    backgroundColor: 'rgba(8,12,20,0.82)',
+    paddingHorizontal: 18,
+    paddingVertical: 20,
   },
-  cardHeader: {
-    marginBottom: 28,
-  },
-  wordmarkSmall: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 20,
-  },
-  wordmarkCine: {
-    fontSize: 18,
-    fontFamily: 'Poppins_700Bold',
-    color: Colors.text.primary,
-    letterSpacing: 2,
-  },
-  aiPillSmall: {
-    backgroundColor: Colors.accent.crimson,
-    borderRadius: 4,
-    paddingHorizontal: 6,
-    paddingVertical: 1,
-  },
-  wordmarkAI: {
+  kicker: {
+    color: '#BFD2ED',
+    fontFamily: Typography.fontMedium,
     fontSize: 10,
-    fontFamily: 'Poppins_700Bold',
-    color: Colors.text.onAccent,
-    letterSpacing: 1,
+    letterSpacing: 1.1,
+    marginBottom: 8,
   },
   title: {
-    fontSize: 28,
-    fontFamily: 'Poppins_700Bold',
     color: Colors.text.primary,
-    marginBottom: 8,
+    fontFamily: Typography.fontDisplay,
+    fontSize: 28,
+    lineHeight: 34,
     letterSpacing: -0.5,
   },
   subtitle: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    color: Colors.text.secondary,
+    marginTop: 7,
+    marginBottom: 14,
+    color: '#A5B2C5',
+    fontFamily: Typography.fontPrimary,
+    fontSize: 13,
     lineHeight: 20,
   },
   errorBox: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    backgroundColor: Colors.semantic.errorMuted,
-    borderRadius: Radius.md,
     borderWidth: 1,
-    borderColor: `${Colors.semantic.error}33`,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    marginBottom: 16,
+    borderColor: 'rgba(230,57,70,0.35)',
+    backgroundColor: 'rgba(230,57,70,0.12)',
+    borderRadius: Radius.md,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    marginBottom: 12,
   },
   errorText: {
     flex: 1,
-    fontSize: 13,
-    fontFamily: 'Inter_400Regular',
     color: Colors.semantic.error,
+    fontFamily: Typography.fontPrimary,
+    fontSize: 12,
   },
-  forgotBtn: {
+  inlineLink: {
     alignSelf: 'flex-end',
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    marginTop: -8,
-    marginBottom: 24,
-    paddingVertical: 4,
+    marginBottom: 14,
+    marginTop: -3,
   },
-  forgotText: {
-    fontSize: 13,
-    fontFamily: 'Inter_500Medium',
-    color: Colors.accent.crimson,
+  inlineLinkText: {
+    color: '#C5D8F7',
+    fontFamily: Typography.fontMedium,
+    fontSize: 12,
   },
-  signInBtn: {
-    borderRadius: Radius.lg,
+  submitBtn: {
+    borderRadius: Radius.full,
     overflow: 'hidden',
-    shadowColor: Colors.accent.crimson,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.4,
-    shadowRadius: 16,
-    elevation: 8,
-    marginBottom: 24,
   },
-  btnGradient: {
-    paddingVertical: 18,
-    alignItems: 'center',
+  submitPressed: {
+    opacity: 0.92,
+    transform: [{ scale: 0.988 }],
   },
-  btnContent: {
+  submitGradient: {
+    minHeight: 48,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 7,
   },
-  btnPressed: {
-    opacity: 0.88,
-    transform: [{ scale: 0.98 }],
-  },
-  signInText: {
-    fontSize: 16,
-    fontFamily: 'Inter_600SemiBold',
-    color: Colors.text.onAccent,
-    letterSpacing: 0.5,
+  submitText: {
+    color: '#0B1526',
+    fontFamily: Typography.fontSemiBold,
+    fontSize: 14,
   },
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 20,
+    gap: 10,
+    marginVertical: 14,
   },
-  dividerLine: {
+  divider: {
     flex: 1,
     height: 1,
-    backgroundColor: Colors.glass.border,
+    backgroundColor: 'rgba(201,218,242,0.2)',
   },
   dividerText: {
-    fontSize: 12,
-    fontFamily: 'Inter_500Medium',
-    color: Colors.text.tertiary,
+    color: '#8EA1BF',
+    fontFamily: Typography.fontPrimary,
+    fontSize: 11,
   },
-  signupRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
+  socialStack: {
+    gap: 8,
+  },
+  socialGhostBtn: {
+    minHeight: 50,
+    borderRadius: Radius.lg,
+    borderWidth: 1,
+    borderColor: 'rgba(198,216,241,0.26)',
+    backgroundColor: 'rgba(13,18,28,0.72)',
     alignItems: 'center',
-    gap: 4,
+    paddingHorizontal: 12,
+    flexDirection: 'row',
+    gap: 10,
   },
-  signupPrompt: {
-    fontSize: 14,
-    fontFamily: 'Inter_400Regular',
-    color: Colors.text.secondary,
+  socialIconChip: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: 'rgba(214,228,249,0.26)',
+    backgroundColor: 'rgba(162,188,229,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  signupLink: {
-    fontSize: 14,
-    fontFamily: 'Inter_600SemiBold',
-    color: Colors.accent.crimson,
+  socialLabel: {
+    color: '#D6E2F3',
+    fontFamily: Typography.fontMedium,
+    fontSize: 13,
+    flex: 1,
+  },
+  socialSoonPill: {
+    borderWidth: 1,
+    borderColor: 'rgba(184,202,229,0.32)',
+    backgroundColor: 'rgba(162,188,229,0.12)',
+    borderRadius: Radius.full,
+    minHeight: 22,
+    paddingHorizontal: 9,
+    justifyContent: 'center',
+  },
+  socialSoon: {
+    color: '#AFC1DD',
+    fontFamily: Typography.fontPrimary,
+    fontSize: 10,
+  },
+  guestBtn: {
+    marginTop: 14,
+    minHeight: 45,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(199,214,237,0.24)',
+    backgroundColor: 'rgba(13,18,28,0.5)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 6,
+  },
+  guestText: {
+    color: '#D2DEEE',
+    fontFamily: Typography.fontMedium,
+    fontSize: 13,
+  },
+  switchRow: {
+    marginTop: 14,
+    alignSelf: 'center',
+    flexDirection: 'row',
+  },
+  switchPrompt: {
+    color: '#9FB0C8',
+    fontFamily: Typography.fontPrimary,
+    fontSize: 12,
+  },
+  switchLink: {
+    color: '#D9E8FF',
+    fontFamily: Typography.fontSemiBold,
+    fontSize: 12,
   },
 });
 

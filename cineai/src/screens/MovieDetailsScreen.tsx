@@ -31,6 +31,133 @@ const { width: W, height: H } = Dimensions.get('window');
 const BACKDROP_HEIGHT = H * 0.46;
 type DetailsRouteProp = RouteProp<RootStackParamList, 'MovieDetails'>;
 
+const GENRE_LABELS: Record<number, string> = {
+  12: 'Adventure',
+  14: 'Fantasy',
+  16: 'Animation',
+  18: 'Drama',
+  27: 'Horror',
+  28: 'Action',
+  35: 'Comedy',
+  53: 'Thriller',
+  80: 'Crime',
+  878: 'Sci-Fi',
+  9648: 'Mystery',
+  10402: 'Music',
+  10749: 'Romance',
+};
+
+const normalizeLookupTitle = (title: string | undefined): string => {
+  return String(title || '')
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+const yearFromDate = (date: string | undefined): string => {
+  if (!date || date.length < 4) return '';
+  return date.slice(0, 4);
+};
+
+const isExpectedMovie = (
+  details: Movie | MovieDetails,
+  expectedTitle?: string,
+  expectedYear?: string,
+): boolean => {
+  if (!expectedTitle) return true;
+
+  const actualTitle = normalizeLookupTitle(details.title);
+  const targetTitle = normalizeLookupTitle(expectedTitle);
+  if (!actualTitle || actualTitle !== targetTitle) return false;
+
+  const actualYear = yearFromDate(details.release_date);
+  if (!expectedYear || !actualYear) return true;
+  return actualYear === expectedYear;
+};
+
+const buildFallbackDetailsFromMovie = (base: Movie): MovieDetails => {
+  const genreIds = base.genre_ids || [];
+
+  return {
+    ...base,
+    runtime: base.runtime || 0,
+    genres: base.genres || genreIds
+      .map(id => ({ id, name: GENRE_LABELS[id] }))
+      .filter((genre): genre is { id: number; name: string } => Boolean(genre.name)),
+    production_companies: [],
+    production_countries: [],
+    spoken_languages: [{
+      iso_639_1: base.original_language || 'en',
+      name: base.original_language || 'Unknown',
+      english_name: base.original_language || 'Unknown',
+    }],
+    budget: 0,
+    revenue: 0,
+    imdb_id: base.imdb_id || base.imdbID || '',
+    homepage: '',
+    credits: { cast: [], crew: [] },
+    videos: { results: [] },
+    similar: { page: 1, results: [], total_pages: 1, total_results: 0 },
+    recommendations: { page: 1, results: [], total_pages: 1, total_results: 0 },
+  };
+};
+
+const resolveMovieDetailsFromRoute = async (params: {
+  movieId: number;
+  imdbId?: string;
+  movieTitle?: string;
+  releaseYear?: string;
+  movie?: Movie;
+}): Promise<MovieDetails> => {
+  const expectedTitle = params.movieTitle || params.movie?.title;
+  const expectedYear = params.releaseYear || yearFromDate(params.movie?.release_date);
+  const explicitImdbId = params.imdbId || params.movie?.imdb_id || params.movie?.imdbID;
+
+  if (explicitImdbId) {
+    return tmdbApi.getMovieDetailsByImdbId(explicitImdbId);
+  }
+
+  try {
+    const details = await tmdbApi.getMovieDetails(params.movieId);
+    if (isExpectedMovie(details, expectedTitle, expectedYear)) {
+      return details;
+    }
+  } catch {
+    // Continue to title resolution below.
+  }
+
+  if (expectedTitle) {
+    try {
+      const search = await tmdbApi.searchMovies(expectedTitle, 1, 10);
+      const exactMatch = search.results.find(movie => isExpectedMovie(movie, expectedTitle, expectedYear));
+      const titleMatch = search.results.find(movie => isExpectedMovie(movie, expectedTitle));
+      const candidate = exactMatch || titleMatch || search.results[0];
+
+      if (candidate) {
+        try {
+          const details = await tmdbApi.getMovieDetails(candidate.id);
+          if (isExpectedMovie(details, expectedTitle, expectedYear)) {
+            return details;
+          }
+        } catch {
+          // Fall through to a precise lightweight detail payload.
+        }
+
+        return buildFallbackDetailsFromMovie(candidate);
+      }
+    } catch {
+      // Fall through to route movie fallback.
+    }
+  }
+
+  if (params.movie) {
+    return buildFallbackDetailsFromMovie(params.movie);
+  }
+
+  return tmdbApi.getMovieDetails(params.movieId);
+};
+
 // ─── Rating Component ────────────────────────────────────────────────────────
 const RatingRow: React.FC<{ rating: number; count: number }> = ({ rating, count }) => {
   const stars = Math.round(rating / 2);
@@ -97,7 +224,13 @@ export const MovieDetailsScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<DetailsRouteProp>();
-  const { movieId } = route.params;
+  const {
+    movieId,
+    imdbId,
+    movieTitle,
+    releaseYear: routeReleaseYear,
+    movie: routeMovie,
+  } = route.params;
 
   const { addToWatchlist, removeFromWatchlist, isInWatchlist } = useWatchlistStore();
 
@@ -137,10 +270,14 @@ export const MovieDetailsScreen: React.FC = () => {
     const fetchAll = async () => {
       setLoading(true);
       try {
-        const [d, c] = await Promise.all([
-          tmdbApi.getMovieDetails(movieId),
-          tmdbApi.getCertification(movieId),
-        ]);
+        const d = await resolveMovieDetailsFromRoute({
+          movieId,
+          imdbId,
+          movieTitle,
+          releaseYear: routeReleaseYear,
+          movie: routeMovie,
+        });
+        const c = await tmdbApi.getCertification(d.id).catch(() => 'NR');
         if (active) {
           setMovie(d);
           setCert(c);
@@ -158,7 +295,7 @@ export const MovieDetailsScreen: React.FC = () => {
     };
     fetchAll();
     return () => { active = false; };
-  }, [movieId]);
+  }, [imdbId, movieId, movieTitle, routeMovie, routeReleaseYear]);
 
   const handleShare = async () => {
     if (!movie) return;
@@ -397,7 +534,13 @@ export const MovieDetailsScreen: React.FC = () => {
                   <MovieCard
                     key={sim.id}
                     movie={sim}
-                    onPress={() => navigation.push('MovieDetails', { movieId: sim.id })}
+                    onPress={() => navigation.push('MovieDetails', {
+                      movieId: sim.id,
+                      imdbId: sim.imdb_id || sim.imdbID,
+                      movieTitle: sim.title,
+                      releaseYear: yearFromDate(sim.release_date),
+                      movie: sim,
+                    })}
                   />
                 ))}
               </ScrollView>

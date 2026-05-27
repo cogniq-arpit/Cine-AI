@@ -48,6 +48,16 @@
         }
       ],
       [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "Allow Cine AI to use your microphone for voice prompts.",
+          "speechRecognitionPermission": "Allow Cine AI to turn your voice into chat prompts.",
+          "androidSpeechServicePackages": [
+            "com.google.android.googlequicksearchbox"
+          ]
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {

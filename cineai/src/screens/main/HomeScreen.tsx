@@ -27,6 +27,7 @@ import { useBackendStatusStore } from '../../store/backendStatusStore';
 import { apiClient } from '../../services/api/apiClient';
 import { chatService } from '../../services/api/chatService';
 import { mapTmdbToMovie, numberToImdbId, tmdbApi } from '../../services/tmdbApi';
+import { QuickProfileMenu } from '../../components/ui/QuickProfileMenu';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_HEIGHT = Math.max(420, Math.floor(SCREEN_HEIGHT * 0.58));
@@ -603,6 +604,7 @@ export const HomeScreen: React.FC = () => {
   const [premiumRails, setPremiumRails] = useState<PremiumRailState[]>(
     PREMIUM_RAIL_DEFS.map(def => ({ ...def, movies: [], loading: true })),
   );
+  const [profileMenuVisible, setProfileMenuVisible] = useState(false);
   const heroAdvanceLockRef = useRef(false);
 
   const headerGreeting = useMemo(() => {
@@ -918,7 +920,13 @@ export const HomeScreen: React.FC = () => {
   const openMovie = useCallback((movie: Movie) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     updateContinueWatching(movie).catch(() => {});
-    navigation.navigate('MovieDetails', { movieId: movie.id });
+    navigation.navigate('MovieDetails', {
+      movieId: movie.id,
+      imdbId: movie.imdb_id || movie.imdbID,
+      movieTitle: movie.title,
+      releaseYear: releaseYear(movie.release_date),
+      movie,
+    });
   }, [navigation, updateContinueWatching]);
 
   const toggleHeroWatchlist = useCallback(() => {
@@ -1173,17 +1181,17 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.topActions}>
           <Pressable
             style={styles.topIconBtn}
-            onPress={() => navigation.navigate('AIChat')}
+            onPress={() => navigation.navigate('Search')}
             accessibilityRole="button"
-            accessibilityLabel="Open CineAI chat"
+            accessibilityLabel="Open search"
           >
-            <Ionicons name="sparkles" size={14} color={Colors.text.primary} />
+            <Ionicons name="search" size={14} color={Colors.text.primary} />
           </Pressable>
           <Pressable
             style={styles.topAvatar}
-            onPress={() => navigation.navigate('Profile')}
+            onPress={() => setProfileMenuVisible(true)}
             accessibilityRole="button"
-            accessibilityLabel="Open profile"
+            accessibilityLabel="Open quick profile menu"
           >
             <Text style={styles.topAvatarText} allowFontScaling={false}>
               {(profile?.name?.[0] || 'G').toUpperCase()}
@@ -1344,6 +1352,12 @@ export const HomeScreen: React.FC = () => {
           ) : null}
         </View>
       </ScrollView>
+
+      <QuickProfileMenu
+        visible={profileMenuVisible}
+        onClose={() => setProfileMenuVisible(false)}
+        topOffset={insets.top + 56}
+      />
     </View>
   );
 };

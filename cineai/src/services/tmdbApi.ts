@@ -728,7 +728,9 @@ const getLocalRecommendations = (target: MovieDetails, count = 10): Movie[] => {
 
 // ─── Direct Mapping Functions ──────────────────────────────────────────────
 export const mapTmdbToMovie = (movieData: any): Movie => {
-  let id = imdbIdToNumber(movieData.imdbID);
+  const imdbId = movieData.imdbID || movieData.imdb_id || '';
+  const tmdbId = movieData.id ? Number(movieData.id) : undefined;
+  let id = imdbIdToNumber(imdbId);
   if (!id && movieData.id) {
     id = Number(movieData.id);
   }
@@ -752,6 +754,9 @@ export const mapTmdbToMovie = (movieData: any): Movie => {
 
   return {
     id,
+    imdb_id: imdbId || undefined,
+    imdbID: imdbId || undefined,
+    tmdb_id: tmdbId,
     title: movieData.Title || movieData.title || movieData.original_title || '',
     original_title: movieData.original_title || movieData.Title || movieData.title || '',
     overview: movieData.Plot || movieData.overview || 'No plot overview available.',

@@ -1,6 +1,9 @@
 // ─── Movie Types ───────────────────────────────────────────────────────────
 export interface Movie {
   id: number;
+  imdb_id?: string;
+  imdbID?: string;
+  tmdb_id?: number;
   title: string;
   original_title: string;
   overview: string;
@@ -253,7 +256,14 @@ export type RootStackParamList = {
   Splash: undefined;
   Auth: undefined;
   Main: undefined;
-  MovieDetails: { movieId: number };
+  Search: { query?: string } | undefined;
+  MovieDetails: {
+    movieId: number;
+    imdbId?: string;
+    movieTitle?: string;
+    releaseYear?: string;
+    movie?: Movie;
+  };
   ChatSession: { sessionId?: string };
   Onboarding: undefined;
 };
@@ -268,7 +278,7 @@ export type AuthStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Search: { query?: string } | undefined;
+  Explore: undefined;
   AIChat: undefined;
   Watchlist: undefined;
   Profile: undefined;
