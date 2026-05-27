@@ -728,7 +728,19 @@ const getLocalRecommendations = (target: MovieDetails, count = 10): Movie[] => {
 
 // ─── Direct Mapping Functions ──────────────────────────────────────────────
 export const mapTmdbToMovie = (movieData: any): Movie => {
-  const id = imdbIdToNumber(movieData.imdbID);
+  let id = imdbIdToNumber(movieData.imdbID);
+  if (!id && movieData.id) {
+    id = Number(movieData.id);
+  }
+  if (!id) {
+    const title = movieData.Title || movieData.title || '';
+    let hash = 0;
+    for (let i = 0; i < title.length; i++) {
+      hash = (hash << 5) - hash + title.charCodeAt(i);
+      hash |= 0;
+    }
+    id = Math.abs(hash) || Math.floor(Math.random() * 1000000) + 1;
+  }
   
   const poster = getPosterUrl(movieData.poster_path || movieData.Poster);
   const backdrop = getBackdropUrl(movieData.backdrop_path || movieData.Poster);

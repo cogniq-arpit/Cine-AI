@@ -143,7 +143,7 @@ class MovieMetadataService:
                 
                 search_list = []
                 for res in detailed_responses:
-                    if isinstance(res, dict) and res.get("imdb_id"):
+                    if isinstance(res, dict) and (res.get("imdb_id") or res.get("id")):
                         mapped = self._map_tmdb_to_unified_schema(res)
                         search_list.append(mapped)
                 
@@ -174,7 +174,7 @@ class MovieMetadataService:
                 
                 output = []
                 for res in detailed_responses:
-                    if isinstance(res, dict) and res.get("imdb_id"):
+                    if isinstance(res, dict) and (res.get("imdb_id") or res.get("id")):
                         mapped = self._map_tmdb_to_unified_schema(res)
                         output.append(mapped)
                 return output
@@ -204,7 +204,7 @@ class MovieMetadataService:
                 
                 output = []
                 for res in detailed_responses:
-                    if isinstance(res, dict) and res.get("imdb_id"):
+                    if isinstance(res, dict) and (res.get("imdb_id") or res.get("id")):
                         mapped = self._map_tmdb_to_unified_schema(res)
                         output.append(mapped)
                 return output
@@ -234,7 +234,7 @@ class MovieMetadataService:
                 
                 output = []
                 for res in detailed_responses:
-                    if isinstance(res, dict) and res.get("imdb_id"):
+                    if isinstance(res, dict) and (res.get("imdb_id") or res.get("id")):
                         mapped = self._map_tmdb_to_unified_schema(res)
                         output.append(mapped)
                 return output
@@ -264,7 +264,7 @@ class MovieMetadataService:
                 
                 output = []
                 for res in detailed_responses:
-                    if isinstance(res, dict) and res.get("imdb_id"):
+                    if isinstance(res, dict) and (res.get("imdb_id") or res.get("id")):
                         mapped = self._map_tmdb_to_unified_schema(res)
                         output.append(mapped)
                 return output
@@ -310,7 +310,7 @@ class MovieMetadataService:
                 
                 output = []
                 for res in detailed_responses:
-                    if isinstance(res, dict) and res.get("imdb_id"):
+                    if isinstance(res, dict) and (res.get("imdb_id") or res.get("id")):
                         mapped = self._map_tmdb_to_unified_schema(res)
                         output.append(mapped)
                 return output

@@ -698,7 +698,7 @@ export const HomeScreen: React.FC = () => {
     loader: () => Promise<Movie[]>,
   ): Promise<Movie[]> => {
     const fromCache = getCacheRail(cacheKey);
-    if (fromCache) return fromCache;
+    if (fromCache && fromCache.length > 0) return fromCache;
     const movies = await loader();
     const cleaned = sanitizeMovieList(movies);
     setCacheRail(cacheKey, cleaned);
