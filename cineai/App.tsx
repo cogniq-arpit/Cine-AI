@@ -27,12 +27,14 @@ import { Colors } from './src/constants/theme';
 import { AppNavigator } from './src/navigation/AppNavigator';
 import { SplashScreen } from './src/screens/SplashScreen';
 import { useAuthStore } from './src/store/authStore';
+import { useBackendStatusStore } from './src/store/backendStatusStore';
 
 SplashScreenLib.preventAutoHideAsync();
 
 export default function App() {
   const [showCustomSplash, setShowCustomSplash] = useState(true);
   const { loadSession, isLoading } = useAuthStore();
+  const { initializeStatus } = useBackendStatusStore();
 
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
@@ -47,6 +49,7 @@ export default function App() {
   useEffect(() => {
     if (fontsLoaded || fontError) {
       SplashScreenLib.hideAsync();
+      initializeStatus();
       loadSession();
     }
   }, [fontsLoaded, fontError]);

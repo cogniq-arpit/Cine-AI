@@ -40,9 +40,17 @@ const processQueue = (error: any, token: string | null = null) => {
   failedQueue = [];
 };
 
+export const backendStatusHolder = {
+  status: 'SLEEPING' as 'SLEEPING' | 'AWAKE'
+};
+
 // ─── REQUEST INTERCEPTOR: Inject Access Token ──────────────────────────────
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
+    // If backend is sleeping/cold-starting, enforce a strict 3.5s timeout so fallbacks trigger instantly
+    if (backendStatusHolder.status === 'SLEEPING') {
+      config.timeout = 3500;
+    }
     const token = await AsyncStorage.getItem('accessToken');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;

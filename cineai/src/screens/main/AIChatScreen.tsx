@@ -27,6 +27,7 @@ import * as Speech from 'expo-speech';
 import { Colors, Radius, Motion, Spacing, Typography, Shadows } from '../../constants/theme';
 import { useChatStore } from '../../store/chatStore';
 import { useAuthStore } from '../../store/authStore';
+import { useBackendStatusStore } from '../../store/backendStatusStore';
 import type { ChatMessage, Movie } from '../../types';
 import { VoiceWave } from '../../components/ui/VoiceWave';
 
@@ -388,6 +389,7 @@ const welcomeStyles = StyleSheet.create({
 export const AIChatScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
+  const { status: backendStatus } = useBackendStatusStore();
   const {
     sessions, currentSession, isSending, error, sendMessage,
     createSession, loadSession, deleteSession, loadSessions
@@ -699,8 +701,16 @@ export const AIChatScreen: React.FC = () => {
           <View>
             <Text style={styles.headerTitle} allowFontScaling={false}>CineAI Assistant</Text>
             <View style={styles.onlineRow}>
-              <View style={styles.onlineDot} />
-              <Text style={styles.onlineText} allowFontScaling={false}>Active</Text>
+              <View style={[
+                styles.onlineDot,
+                backendStatus === 'SLEEPING' && { backgroundColor: '#ff9f43' }
+              ]} />
+              <Text style={[
+                styles.onlineText,
+                backendStatus === 'SLEEPING' && { color: '#ff9f43' }
+              ]} allowFontScaling={false}>
+                {backendStatus === 'SLEEPING' ? '⚡ Quick AI Active' : '🧠 Premium AI Connected'}
+              </Text>
             </View>
           </View>
         </View>
