@@ -11,6 +11,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { NavigationContainer } from '@react-navigation/native';
 import { BlurView } from 'expo-blur';
+import { LinearGradient } from 'expo-linear-gradient';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -36,9 +37,15 @@ import { SignUpScreen } from '../screens/auth/SignUpScreen';
 import { ForgotPasswordScreen } from '../screens/auth/ForgotPasswordScreen';
 import { OnboardingScreen } from '../screens/auth/OnboardingScreen';
 import { useAuthStore } from '../store/authStore';
+import { useLanguageStore } from '../store/languageStore';
 import type { MainTabParamList, AuthStackParamList, RootStackParamList } from '../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
+const NAV_BAR_WIDTH = Math.min(SCREEN_WIDTH - (SCREEN_WIDTH < 360 ? 24 : 32), 370);
+const NAV_BAR_LEFT = Math.max((SCREEN_WIDTH - NAV_BAR_WIDTH) / 2, 12);
+const NAV_BAR_INSET = SCREEN_WIDTH < 360 ? 7 : 10;
+const NAV_TAB_SLOT_WIDTH = Math.floor((NAV_BAR_WIDTH - NAV_BAR_INSET * 2) / 5);
+const AI_TAB_WIDTH = Math.min(76, Math.max(66, NAV_TAB_SLOT_WIDTH + 8));
 const Tab = createBottomTabNavigator<MainTabParamList>();
 const AuthStack = createNativeStackNavigator<AuthStackParamList>();
 const RootStack = createNativeStackNavigator<RootStackParamList>();
@@ -54,12 +61,17 @@ interface TabIconProps {
 }
 
 const TabIcon: React.FC<TabIconProps> = ({ icon, iconFocused, label, focused }) => {
-  const scale = useSharedValue(1);
+  const scale = useSharedValue(focused ? 1.03 : 1);
+  const translateY = useSharedValue(focused ? -1.5 : 0);
   const dotScale = useSharedValue(focused ? 1 : 0);
   const dotOpacity = useSharedValue(focused ? 1 : 0);
+  const capsuleOpacity = useSharedValue(focused ? 1 : 0);
 
   const containerStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: scale.value }],
+    transform: [
+      { scale: scale.value },
+      { translateY: translateY.value }
+    ],
   }));
 
   const dotStyle = useAnimatedStyle(() => ({
@@ -67,33 +79,51 @@ const TabIcon: React.FC<TabIconProps> = ({ icon, iconFocused, label, focused }) 
     opacity: dotOpacity.value,
   }));
 
+  const capsuleStyle = useAnimatedStyle(() => ({
+    opacity: capsuleOpacity.value,
+    transform: [{ scale: withSpring(focused ? 1 : 0.8, Motion.springs.snappy) }],
+  }));
+
   React.useEffect(() => {
     if (focused) {
       scale.value = withSequence(
-        withSpring(1.2, Motion.springs.snappy),
-        withSpring(1.0, Motion.springs.snappy)
+        withSpring(1.07, Motion.springs.snappy),
+        withSpring(1.03, Motion.springs.snappy)
       );
+      translateY.value = withSpring(-1.5, Motion.springs.snappy);
       dotScale.value = withSpring(1, Motion.springs.bounce);
       dotOpacity.value = withTiming(1, { duration: 150 });
+      capsuleOpacity.value = withTiming(1, { duration: 200 });
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
     } else {
       scale.value = withSpring(1, Motion.springs.gentle);
+      translateY.value = withSpring(0, Motion.springs.gentle);
       dotScale.value = withSpring(0, Motion.springs.snappy);
       dotOpacity.value = withTiming(0, { duration: 100 });
+      capsuleOpacity.value = withTiming(0, { duration: 150 });
     }
   }, [focused]);
 
   return (
     <Animated.View style={[tabStyles.iconContainer, containerStyle]}>
-      <Ionicons
-        name={focused ? iconFocused : icon}
-        size={21}
-        color={focused ? Colors.accent.crimson : Colors.text.tertiary}
-      />
+      <View style={tabStyles.iconWrapper}>
+        {/* Ambient glassmorphic glowing capsule underlay centered exactly behind the icon */}
+        <Animated.View style={[tabStyles.activeCapsule, capsuleStyle]} />
+        <Ionicons
+          name={focused ? iconFocused : icon}
+          size={20}
+          color={focused ? Colors.text.primary : Colors.text.tertiary}
+        />
+      </View>
       <Text
-        style={[tabStyles.label, focused && tabStyles.labelFocused]}
+        style={[
+          tabStyles.label,
+          focused ? tabStyles.labelFocused : tabStyles.labelUnfocused
+        ]}
         numberOfLines={1}
         allowFontScaling={false}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
       >
         {label}
       </Text>
@@ -105,32 +135,57 @@ const TabIcon: React.FC<TabIconProps> = ({ icon, iconFocused, label, focused }) 
 const tabStyles = StyleSheet.create({
   iconContainer: {
     alignItems: 'center',
-    gap: 3,
-    paddingTop: 6,
-    width: 62,
-    minHeight: 52,
+    justifyContent: 'center',
+    width: NAV_TAB_SLOT_WIDTH,
+    height: 54,
+    position: 'relative',
+  },
+  iconWrapper: {
+    width: 42,
+    height: 26,
+    alignItems: 'center',
+    justifyContent: 'center',
+    position: 'relative',
+  },
+  activeCapsule: {
+    ...StyleSheet.absoluteFillObject,
+    borderRadius: 13,
+    backgroundColor: 'rgba(230, 57, 70, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(230, 57, 70, 0.18)',
+    shadowColor: Colors.accent.crimson,
+    shadowOffset: { width: 0, height: 0 },
+    shadowOpacity: 0.25,
+    shadowRadius: 6,
   },
   label: {
-    fontSize: 10,
+    fontSize: 9.2,
+    lineHeight: 12,
     fontFamily: 'Inter_500Medium',
-    color: Colors.text.tertiary,
     textAlign: 'center',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
+    marginTop: 1,
+    width: NAV_TAB_SLOT_WIDTH,
   },
   labelFocused: {
-    color: Colors.accent.crimson,
+    color: Colors.text.primary,
     fontFamily: 'Inter_600SemiBold',
+    opacity: 1,
+  },
+  labelUnfocused: {
+    color: Colors.text.tertiary,
+    opacity: 0.75,
   },
   activeDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
+    width: 10,
+    height: 2,
+    borderRadius: 1,
     backgroundColor: Colors.accent.crimson,
     marginTop: 1,
     shadowColor: Colors.accent.crimson,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
-    shadowRadius: 6,
+    shadowRadius: 5,
   },
 });
 
@@ -139,20 +194,27 @@ const AITabButton: React.FC<{ focused: boolean; onPress: () => void }> = ({
   focused,
   onPress,
 }) => {
-  const scale = useSharedValue(1);
+  const scale = useSharedValue(focused ? 1.05 : 1);
+  const t = useLanguageStore(state => state.t);
 
   const containerStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
+    shadowOpacity: withTiming(focused ? 0.8 : 0.4, { duration: 250 }),
+    shadowRadius: withTiming(focused ? 12 : 6, { duration: 250 }),
   }));
 
   const handlePressIn = () => {
-    scale.value = withSpring(0.94, Motion.springs.snappy);
+    scale.value = withSpring(0.92, Motion.springs.snappy);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
   };
 
   const handlePressOut = () => {
-    scale.value = withSpring(1, Motion.springs.bounce);
+    scale.value = withSpring(focused ? 1.05 : 1, Motion.springs.bounce);
   };
+
+  React.useEffect(() => {
+    scale.value = withSpring(focused ? 1.05 : 1, Motion.springs.snappy);
+  }, [focused]);
 
   return (
     <Animated.View style={[aiTabStyles.outerContainer, containerStyle]}>
@@ -160,21 +222,36 @@ const AITabButton: React.FC<{ focused: boolean; onPress: () => void }> = ({
         onPress={onPress}
         onPressIn={handlePressIn}
         onPressOut={handlePressOut}
-        style={[aiTabStyles.btn, focused && aiTabStyles.btnFocused]}
         accessibilityRole="button"
-        accessibilityLabel="CineAI Chat"
+        accessibilityLabel={t('tab.aiChat')}
+        style={StyleSheet.absoluteFill}
       >
-        <Ionicons
-          name={focused ? 'sparkles' : 'sparkles-outline'}
-          size={13}
-          color={focused ? Colors.text.onAccent : Colors.accent.crimsonLight}
-        />
-        <Text
-          style={[aiTabStyles.btnText, focused && aiTabStyles.btnTextFocused]}
-          allowFontScaling={false}
+        <LinearGradient
+          colors={
+            focused
+              ? ['#FF5563', '#E63946', '#C1121F']
+              : ['#1E1E28', '#12121A']
+          }
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={[
+            aiTabStyles.btn,
+            focused ? aiTabStyles.btnFocused : aiTabStyles.btnUnfocused,
+          ]}
         >
-          CINE AI
-        </Text>
+          {/* Subtle top inner reflection border */}
+          <View style={aiTabStyles.innerHighlight} />
+          
+          <Text
+            style={[
+              aiTabStyles.btnText,
+              focused ? aiTabStyles.btnTextFocused : aiTabStyles.btnTextUnfocused,
+            ]}
+            allowFontScaling={false}
+          >
+            {t('tab.aiChat')}
+          </Text>
+        </LinearGradient>
       </Pressable>
     </Animated.View>
   );
@@ -182,39 +259,58 @@ const AITabButton: React.FC<{ focused: boolean; onPress: () => void }> = ({
 
 const aiTabStyles = StyleSheet.create({
   outerContainer: {
-    top: 2,
+    top: 11, // Perfectly centers the Cine AI button vertically within the tab bar
     alignItems: 'center',
     justifyContent: 'center',
+    width: 90,
+    height: 34,
+    shadowColor: '#E63946',
+    shadowOffset: { width: 0, height: 2 },
   },
   btn: {
     flexDirection: 'row',
-    width: 82,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: Colors.bg.raised,
+    width: '100%',
+    height: '100%',
+    borderRadius: 17,
     alignItems: 'center',
     justifyContent: 'center',
-    borderWidth: 1.5,
-    borderColor: 'rgba(230,57,70,0.34)',
-    gap: 4,
+    position: 'relative',
+    overflow: 'hidden',
   },
   btnFocused: {
-    backgroundColor: Colors.accent.crimson,
-    borderColor: Colors.accent.crimsonLight,
+    borderWidth: 1,
+    borderColor: '#FF7F8C',
+  },
+  btnUnfocused: {
+    borderWidth: 1.5,
+    borderColor: 'rgba(230, 57, 70, 0.28)',
+  },
+  innerHighlight: {
+    position: 'absolute',
+    top: 1,
+    left: 4,
+    right: 4,
+    height: 1,
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+    borderRadius: Radius.full,
   },
   btnText: {
-    fontSize: 9,
+    fontSize: 9.5,
     fontFamily: 'Poppins_700Bold',
-    color: Colors.accent.crimsonLight,
     letterSpacing: 0.5,
   },
   btnTextFocused: {
     color: Colors.text.onAccent,
   },
+  btnTextUnfocused: {
+    color: Colors.accent.crimsonLight,
+  },
 });
 
 // ─── Main Tab Navigator ────────────────────────────────────────────────────
 const MainTabNavigator: React.FC = () => {
+  const t = useLanguageStore(state => state.t);
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -222,34 +318,29 @@ const MainTabNavigator: React.FC = () => {
         tabBarHideOnKeyboard: true,
         tabBarStyle: {
           position: 'absolute',
-          bottom: Platform.OS === 'ios' ? 20 : 10,
+          bottom: Platform.OS === 'ios' ? 24 : 14,
           left: 20,
           right: 20,
-          height: 56,
+          height: 60,
           borderRadius: Radius['3xl'],
           borderWidth: 1,
-          borderColor: Colors.glass.border,
-          backgroundColor:
-            Platform.OS === 'ios'
-              ? 'rgba(13,13,18,0.5)'
-              : 'rgba(13,13,18,0.92)',
-          shadowColor: '#000',
-          shadowOffset: { width: 0, height: 8 },
-          shadowOpacity: 0.4,
-          shadowRadius: 16,
-          elevation: 8,
+          borderColor: 'rgba(230, 57, 70, 0.12)', // Subtle crimson glowing border
+          backgroundColor: '#0D0D12', // Solid OLED deep background
+          shadowColor: '#E63946', // OLED soft crimson underglow
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.16,
+          shadowRadius: 20,
+          elevation: 10,
           paddingBottom: 0,
           borderTopWidth: 0,
           overflow: 'hidden',
         },
-        tabBarBackground: () => (
-          <BlurView
-            intensity={Platform.OS === 'ios' ? 50 : 0}
-            tint="dark"
-            style={StyleSheet.absoluteFill}
-          />
-        ),
+        tabBarBackground: () => null,
         tabBarShowLabel: false,
+        tabBarItemStyle: {
+          paddingHorizontal: 0,
+          marginHorizontal: 0,
+        },
       }}
     >
       <Tab.Screen
@@ -260,7 +351,7 @@ const MainTabNavigator: React.FC = () => {
             <TabIcon
               icon="home-outline"
               iconFocused="home"
-              label="Home"
+              label={t('tab.home')}
               focused={focused}
             />
           ),
@@ -274,7 +365,7 @@ const MainTabNavigator: React.FC = () => {
             <TabIcon
               icon="compass-outline"
               iconFocused="compass"
-              label="Explore"
+              label={t('tab.explore')}
               focused={focused}
             />
           ),
@@ -300,7 +391,7 @@ const MainTabNavigator: React.FC = () => {
             <TabIcon
               icon="bookmark-outline"
               iconFocused="bookmark"
-              label="Saved"
+              label={t('tab.saved')}
               focused={focused}
             />
           ),
@@ -314,7 +405,7 @@ const MainTabNavigator: React.FC = () => {
             <TabIcon
               icon="person-outline"
               iconFocused="person"
-              label="Profile"
+              label={t('tab.profile')}
               focused={focused}
             />
           ),

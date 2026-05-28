@@ -29,6 +29,18 @@ export const apiClient = axios.create({
 let isRefreshing = false;
 let failedQueue: any[] = [];
 
+const OFFLINE_ACCESS_TOKEN = 'offline_access_token';
+const OFFLINE_REFRESH_TOKEN = 'offline_refresh_token';
+
+const isUsableToken = (token: string | null): token is string => {
+  return Boolean(token && token !== OFFLINE_ACCESS_TOKEN && token !== OFFLINE_REFRESH_TOKEN);
+};
+
+const clearStoredSessionTokens = async () => {
+  await AsyncStorage.removeItem('accessToken');
+  await AsyncStorage.removeItem('refreshToken');
+};
+
 const processQueue = (error: any, token: string | null = null) => {
   failedQueue.forEach((prom) => {
     if (error) {
@@ -52,7 +64,7 @@ apiClient.interceptors.request.use(
       config.timeout = 3500;
     }
     const token = await AsyncStorage.getItem('accessToken');
-    if (token && config.headers) {
+    if (isUsableToken(token) && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -65,9 +77,10 @@ apiClient.interceptors.response.use(
   (response: AxiosResponse) => response,
   async (error) => {
     const originalRequest = error.config;
+    const requestHadAuthHeader = Boolean(originalRequest?.headers?.Authorization);
 
     // Check if error is unauthorized (token expired) and request hasn't retried yet
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    if (error.response?.status === 401 && originalRequest && requestHadAuthHeader && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           failedQueue.push({ resolve, reject });
@@ -84,8 +97,11 @@ apiClient.interceptors.response.use(
 
       try {
         const refreshToken = await AsyncStorage.getItem('refreshToken');
-        if (!refreshToken) {
-          throw new Error('No refresh token available');
+        if (!isUsableToken(refreshToken)) {
+          await clearStoredSessionTokens();
+          processQueue(error, null);
+          isRefreshing = false;
+          return Promise.reject(error);
         }
 
         // Call the refresh endpoint on the backend
@@ -111,8 +127,7 @@ apiClient.interceptors.response.use(
         isRefreshing = false;
 
         // Revoke session on failure
-        await AsyncStorage.removeItem('accessToken');
-        await AsyncStorage.removeItem('refreshToken');
+        await clearStoredSessionTokens();
         await AsyncStorage.removeItem('user');
 
         return Promise.reject(refreshError);

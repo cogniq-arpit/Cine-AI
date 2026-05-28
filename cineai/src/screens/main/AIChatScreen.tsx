@@ -4,6 +4,7 @@ import {
   FlatList,
   Keyboard,
   KeyboardAvoidingView,
+  LayoutAnimation,
   Modal,
   Platform,
   Pressable,
@@ -12,7 +13,9 @@ import {
   StyleSheet,
   Text,
   TextInput,
+  UIManager,
   View,
+  type KeyboardEvent,
   useWindowDimensions,
 } from 'react-native';
 import { Image } from 'expo-image';
@@ -34,6 +37,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Colors, Radius, Typography } from '../../constants/theme';
 import { useBackendStatusStore } from '../../store/backendStatusStore';
 import { useChatStore } from '../../store/chatStore';
+import { useLanguageStore } from '../../store/languageStore';
 import type { ChatMessage, ChatSession, Movie, MovieRecommendation } from '../../types';
 
 type IoniconName = React.ComponentProps<typeof Ionicons>['name'];
@@ -84,27 +88,31 @@ const STARTER_PROMPTS: StarterPrompt[] = [
   },
 ];
 
-const statusCopy = (backendStatus: 'SLEEPING' | 'AWAKE', hasError: boolean) => {
+if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
+  UIManager.setLayoutAnimationEnabledExperimental(true);
+}
+
+const statusCopy = (backendStatus: 'SLEEPING' | 'AWAKE', hasError: boolean, t: (key: string) => string) => {
   if (hasError) {
     return {
-      label: 'Fallback',
+      label: t('chat.status.fallback'),
       color: Colors.semantic.error,
-      description: 'Local recovery active',
+      description: t('chat.status.local'),
     };
   }
 
   if (backendStatus === 'AWAKE') {
     return {
-      label: 'Online',
+      label: t('chat.status.online'),
       color: Colors.semantic.success,
       description: 'Premium',
     };
   }
 
   return {
-    label: 'Fallback',
+    label: t('chat.status.fallback'),
     color: Colors.semantic.error,
-    description: 'Quick AI',
+    description: t('chat.status.quick'),
   };
 };
 
@@ -210,39 +218,82 @@ const MessageRow: React.FC<{
 
 const EmptyChat: React.FC<{
   onPrompt: (prompt: string) => void;
-}> = ({ onPrompt }) => (
-  <ScrollView
-    showsVerticalScrollIndicator={false}
-    contentContainerStyle={styles.emptyContent}
-    keyboardShouldPersistTaps="handled"
-  >
-    <View style={styles.emptyHero}>
-      <AIIcon size={44} />
-      <Text style={styles.emptyTitle} allowFontScaling={false}>What should we watch?</Text>
-      <Text style={styles.emptySubtitle} allowFontScaling={false}>
-        Ask for a mood, a director, a genre, a hidden gem, or a streaming-style shortlist.
-      </Text>
-    </View>
+}> = ({ onPrompt }) => {
+  const t = useLanguageStore(state => state.t);
+  
+  const starterPrompts = [
+    {
+      id: 'mood',
+      icon: 'moon-outline' as const,
+      title: t('chat.starter.mood'),
+      prompt: t('chat.starter.moodPrompt'),
+    },
+    {
+      id: 'surprise',
+      icon: 'shuffle-outline' as const,
+      title: t('chat.starter.surprise'),
+      prompt: t('chat.starter.surprisePrompt'),
+    },
+    {
+      id: 'prestige',
+      icon: 'trophy-outline' as const,
+      title: t('chat.starter.prestige'),
+      prompt: t('chat.starter.prestigePrompt'),
+    },
+    {
+      id: 'thrill',
+      icon: 'flash-outline' as const,
+      title: t('chat.starter.thrill'),
+      prompt: t('chat.starter.thrillPrompt'),
+    },
+    {
+      id: 'worlds',
+      icon: 'planet-outline' as const,
+      title: t('chat.starter.worlds'),
+      prompt: t('chat.starter.worldsPrompt'),
+    },
+    {
+      id: 'hidden',
+      icon: 'diamond-outline' as const,
+      title: t('chat.starter.hidden'),
+      prompt: t('chat.starter.hiddenPrompt'),
+    },
+  ];
 
-    <View style={styles.promptGrid}>
-      {STARTER_PROMPTS.map(prompt => (
-        <Pressable
-          key={prompt.id}
-          style={({ pressed }) => [styles.promptCard, pressed && styles.pressedCard]}
-          onPress={() => onPrompt(prompt.prompt)}
-        >
-          <View style={styles.promptIcon}>
-            <Ionicons name={prompt.icon} size={16} color={Colors.accent.crimsonLight} />
-          </View>
-          <Text style={styles.promptTitle} allowFontScaling={false}>{prompt.title}</Text>
-          <Text style={styles.promptText} numberOfLines={3} allowFontScaling={false}>
-            {prompt.prompt}
-          </Text>
-        </Pressable>
-      ))}
-    </View>
-  </ScrollView>
-);
+  return (
+    <ScrollView
+      showsVerticalScrollIndicator={false}
+      contentContainerStyle={styles.emptyContent}
+      keyboardShouldPersistTaps="handled"
+    >
+      <View style={styles.emptyHero}>
+        <AIIcon size={44} />
+        <Text style={styles.emptyTitle} allowFontScaling={false}>{t('chat.welcomeTitle')}</Text>
+        <Text style={styles.emptySubtitle} allowFontScaling={false}>
+          {t('chat.welcomeSub')}
+        </Text>
+      </View>
+
+      <View style={styles.promptGrid}>
+        {starterPrompts.map(prompt => (
+          <Pressable
+            key={prompt.id}
+            style={({ pressed }) => [styles.promptCard, pressed && styles.pressedCard]}
+            onPress={() => onPrompt(prompt.prompt)}
+          >
+            <View style={styles.promptIcon}>
+              <Ionicons name={prompt.icon} size={16} color={Colors.accent.crimsonLight} />
+            </View>
+            <Text style={styles.promptTitle} allowFontScaling={false}>{prompt.title}</Text>
+            <Text style={styles.promptText} numberOfLines={3} allowFontScaling={false}>
+              {prompt.prompt}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </ScrollView>
+  );
+};
 
 const HistoryModal: React.FC<{
   visible: boolean;
@@ -252,63 +303,69 @@ const HistoryModal: React.FC<{
   onClose: () => void;
   onSelect: (id: string) => void;
   onDelete: (id: string) => void;
-}> = ({ visible, sessions, activeId, bottomInset, onClose, onSelect, onDelete }) => (
-  <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
-    <View style={styles.modalRoot}>
-      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
-      <View style={[styles.historySheet, { paddingBottom: bottomInset + 14 }]}>
-        <View style={styles.sheetHandle} />
-        <Text style={styles.sheetTitle} allowFontScaling={false}>Chat History</Text>
-        <Text style={styles.sheetSubtitle} allowFontScaling={false}>Resume a conversation or clear old threads.</Text>
+}> = ({ visible, sessions, activeId, bottomInset, onClose, onSelect, onDelete }) => {
+  const t = useLanguageStore(state => state.t);
+  
+  return (
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <View style={styles.modalRoot}>
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
+        <View style={[styles.historySheet, { paddingBottom: bottomInset + 14 }]}>
+          <View style={styles.sheetHandle} />
+          <Text style={styles.sheetTitle} allowFontScaling={false}>{t('chat.history')}</Text>
+          <Text style={styles.sheetSubtitle} allowFontScaling={false}>{t('chat.historySub')}</Text>
 
-        <ScrollView contentContainerStyle={styles.historyList} showsVerticalScrollIndicator={false}>
-          {sessions.length === 0 ? (
-            <View style={styles.historyEmpty}>
-              <Ionicons name="chatbubble-ellipses-outline" size={28} color={Colors.text.tertiary} />
-              <Text style={styles.historyEmptyText} allowFontScaling={false}>No conversations yet.</Text>
-            </View>
-          ) : (
-            sessions.map(session => {
-              const firstMessage = session.messages?.[0]?.content;
-              const lastMessage = session.messages?.[session.messages.length - 1]?.content;
-              const title = session.title === 'New Chat' && firstMessage ? firstMessage : session.title;
-              const active = session.id === activeId;
+          <ScrollView contentContainerStyle={styles.historyList} showsVerticalScrollIndicator={false}>
+            {sessions.length === 0 ? (
+              <View style={styles.historyEmpty}>
+                <Ionicons name="chatbubble-ellipses-outline" size={28} color={Colors.text.tertiary} />
+                <Text style={styles.historyEmptyText} allowFontScaling={false}>{t('chat.historyEmpty')}</Text>
+              </View>
+            ) : (
+              sessions.map(session => {
+                const firstMessage = session.messages?.[0]?.content;
+                const lastMessage = session.messages?.[session.messages.length - 1]?.content;
+                const title = session.title === 'New Chat' && firstMessage ? firstMessage : session.title;
+                const active = session.id === activeId;
 
-              return (
-                <Pressable
-                  key={session.id}
-                  style={[styles.historyItem, active && styles.historyItemActive]}
-                  onPress={() => onSelect(session.id)}
-                >
-                  <View style={styles.historyCopy}>
-                    <Text style={[styles.historyTitle, active && styles.historyTitleActive]} numberOfLines={1} allowFontScaling={false}>
-                      {title || 'New Chat'}
-                    </Text>
-                    <Text style={styles.historyPreview} numberOfLines={1} allowFontScaling={false}>
-                      {lastMessage || 'Empty conversation'}
-                    </Text>
-                  </View>
+                return (
                   <Pressable
-                    style={styles.historyDelete}
-                    onPress={() => onDelete(session.id)}
-                    hitSlop={10}
+                    key={session.id}
+                    style={[styles.historyItem, active && styles.historyItemActive]}
+                    onPress={() => onSelect(session.id)}
                   >
-                    <Ionicons name="trash-outline" size={16} color={Colors.text.tertiary} />
+                    <View style={styles.historyCopy}>
+                      <Text style={[styles.historyTitle, active && styles.historyTitleActive]} numberOfLines={1} allowFontScaling={false}>
+                        {title || 'New Chat'}
+                      </Text>
+                      <Text style={styles.historyPreview} numberOfLines={1} allowFontScaling={false}>
+                        {lastMessage || 'Empty conversation'}
+                      </Text>
+                    </View>
+                    <Pressable
+                      style={styles.historyDelete}
+                      onPress={() => onDelete(session.id)}
+                      hitSlop={10}
+                    >
+                      <Ionicons name="trash-outline" size={16} color={Colors.text.tertiary} />
+                    </Pressable>
                   </Pressable>
-                </Pressable>
-              );
-            })
-          )}
-        </ScrollView>
+                );
+              })
+            )}
+          </ScrollView>
+        </View>
       </View>
-    </View>
-  </Modal>
-);
+    </Modal>
+  );
+};
 
 export const AIChatScreen: React.FC = () => {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { width } = useWindowDimensions();
+  const t = useLanguageStore(state => state.t);
+  const language = useLanguageStore(state => state.language);
   const { status: backendStatus } = useBackendStatusStore();
   const {
     sessions,
@@ -339,17 +396,39 @@ export const AIChatScreen: React.FC = () => {
 
   const messages = currentSession?.messages || [];
   const isEmpty = messages.length === 0;
-  const status = statusCopy(backendStatus, Boolean(error || voiceError));
+  const status = statusCopy(backendStatus, Boolean(error || voiceError), t);
   const composerBottomPadding = isKeyboardVisible ? 10 : insets.bottom + 72;
   const canSendText = text.trim().length > 0 && !isSending;
   const rightIconName: IoniconName = canSendText ? 'arrow-up' : isRecognizing ? 'stop' : 'mic-outline';
+
+  const scrollToLatest = useCallback((delay = 90) => {
+    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), delay);
+  }, []);
+
+  const animateKeyboardLayout = useCallback((event?: KeyboardEvent) => {
+    const duration = Math.min(Math.max(event?.duration || 240, 180), 340);
+    LayoutAnimation.configureNext({
+      duration,
+      create: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+      update: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+      },
+      delete: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+    });
+  }, []);
 
   useSpeechRecognitionEvent('start', () => {
     setIsRecognizing(true);
     setVoiceError(null);
   });
 
-  useSpeechRecognitionEvent('result', (event) => {
+  useSpeechRecognitionEvent('result', (event: any) => {
     const transcript = event.results[0]?.transcript?.trim() || '';
     if (!transcript) return;
 
@@ -358,7 +437,7 @@ export const AIChatScreen: React.FC = () => {
     setText(transcript);
   });
 
-  useSpeechRecognitionEvent('error', (event) => {
+  useSpeechRecognitionEvent('error', (event: any) => {
     setIsRecognizing(false);
     submitVoiceOnEndRef.current = false;
     const message = event.error === 'no-speech' || event.error === 'speech-timeout'
@@ -398,13 +477,23 @@ export const AIChatScreen: React.FC = () => {
     const clean = cleanSpeechText(content);
     if (!clean) return;
 
+    const speechLocaleMap: Record<string, string> = {
+      en: 'en-US',
+      es: 'es-ES',
+      fr: 'fr-FR',
+      de: 'de-DE',
+      hi: 'hi-IN',
+      ja: 'ja-JP',
+      ko: 'ko-KR',
+    };
+
     Speech.stop();
     Speech.speak(clean, {
-      language: 'en-US',
+      language: speechLocaleMap[language] || 'en-US',
       pitch: 1,
       rate: 0.98,
     });
-  }, [isMuted]);
+  }, [isMuted, language]);
 
   const sendPrompt = useCallback(async (prompt: string, source: 'text' | 'voice' = 'text') => {
     const trimmed = prompt.trim();
@@ -463,8 +552,18 @@ export const AIChatScreen: React.FC = () => {
       setVoiceError(null);
       stopSpeaking();
 
+      const speechLocaleMap: Record<string, string> = {
+        en: 'en-US',
+        es: 'es-ES',
+        fr: 'fr-FR',
+        de: 'de-DE',
+        hi: 'hi-IN',
+        ja: 'ja-JP',
+        ko: 'ko-KR',
+      };
+
       ExpoSpeechRecognitionModule.start({
-        lang: 'en-US',
+        lang: speechLocaleMap[language] || 'en-US',
         interimResults: true,
         continuous: false,
         addsPunctuation: true,
@@ -542,23 +641,30 @@ export const AIChatScreen: React.FC = () => {
   useEffect(() => {
     const showSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow',
-      () => setIsKeyboardVisible(true),
+      (event) => {
+        animateKeyboardLayout(event);
+        setIsKeyboardVisible(true);
+        scrollToLatest(Platform.OS === 'ios' ? event.duration || 120 : 80);
+      },
     );
     const hideSub = Keyboard.addListener(
       Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide',
-      () => setIsKeyboardVisible(false),
+      (event) => {
+        animateKeyboardLayout(event);
+        setIsKeyboardVisible(false);
+      },
     );
 
     return () => {
       showSub.remove();
       hideSub.remove();
     };
-  }, []);
+  }, [animateKeyboardLayout, scrollToLatest]);
 
   useEffect(() => {
     if (messages.length === 0) return;
-    setTimeout(() => listRef.current?.scrollToEnd({ animated: true }), 90);
-  }, [messages.length]);
+    scrollToLatest();
+  }, [messages.length, scrollToLatest]);
 
   useEffect(() => {
     const lastMessage = messages[messages.length - 1];
@@ -587,7 +693,8 @@ export const AIChatScreen: React.FC = () => {
   return (
     <KeyboardAvoidingView
       style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
     >
       <StatusBar barStyle="light-content" backgroundColor={Colors.bg.void} />
 
@@ -663,8 +770,12 @@ export const AIChatScreen: React.FC = () => {
                 <MessageRow message={item} onMoviePress={openMovieDetails} />
               )}
               showsVerticalScrollIndicator={false}
-              contentContainerStyle={styles.messageList}
+              contentContainerStyle={[
+                styles.messageList,
+                { paddingBottom: isKeyboardVisible ? 18 : 24 },
+              ]}
               keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
               ListFooterComponent={isSending ? <TypingIndicator /> : null}
               initialNumToRender={10}
               maxToRenderPerBatch={8}
@@ -675,7 +786,7 @@ export const AIChatScreen: React.FC = () => {
       </View>
 
       {(error || voiceError || isRecognizing || voiceTranscript) ? (
-        <View style={[styles.liveStatus, { bottom: composerBottomPadding + 74 }]}>
+        <View style={styles.liveStatus}>
           <Ionicons
             name={error || voiceError ? 'alert-circle-outline' : isRecognizing ? 'mic-outline' : 'checkmark-circle-outline'}
             size={14}
@@ -713,7 +824,7 @@ export const AIChatScreen: React.FC = () => {
                 setText(value);
                 if (voiceError) setVoiceError(null);
               }}
-              placeholder="Ask CineAI what to watch..."
+              placeholder={t('chat.inputPlaceholder')}
               placeholderTextColor={Colors.text.tertiary}
               style={styles.input}
               multiline
@@ -726,6 +837,7 @@ export const AIChatScreen: React.FC = () => {
                 }
               }}
               selectionColor={Colors.accent.crimson}
+              onFocus={() => scrollToLatest(120)}
               allowFontScaling={false}
             />
           </View>
@@ -868,7 +980,7 @@ const styles = StyleSheet.create({
   emptyContent: {
     paddingHorizontal: 20,
     paddingTop: 28,
-    paddingBottom: 190,
+    paddingBottom: 34,
   },
   emptyHero: {
     alignItems: 'center',
@@ -932,7 +1044,7 @@ const styles = StyleSheet.create({
   },
   messageList: {
     paddingTop: 18,
-    paddingBottom: 188,
+    paddingBottom: 24,
   },
   messageRow: {
     flexDirection: 'row',
@@ -1043,9 +1155,8 @@ const styles = StyleSheet.create({
     backgroundColor: Colors.text.secondary,
   },
   liveStatus: {
-    position: 'absolute',
-    left: 20,
-    right: 20,
+    marginHorizontal: 20,
+    marginBottom: 8,
     minHeight: 34,
     borderRadius: Radius.full,
     borderWidth: 1,
@@ -1065,10 +1176,6 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontPrimary,
   },
   composerWrap: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    bottom: 0,
     paddingHorizontal: 14,
     backgroundColor: 'rgba(7,7,9,0.96)',
     borderTopWidth: 1,

@@ -28,6 +28,7 @@ import { AppNavigator } from './src/navigation/AppNavigator';
 import { SplashScreen } from './src/screens/SplashScreen';
 import { useAuthStore } from './src/store/authStore';
 import { useBackendStatusStore } from './src/store/backendStatusStore';
+import { useLanguageStore } from './src/store/languageStore';
 
 SplashScreenLib.preventAutoHideAsync();
 
@@ -50,6 +51,7 @@ export default function App() {
     if (fontsLoaded || fontError) {
       SplashScreenLib.hideAsync();
       initializeStatus();
+      useLanguageStore.getState().loadLanguage().catch(() => {});
       loadSession();
     }
   }, [fontsLoaded, fontError]);

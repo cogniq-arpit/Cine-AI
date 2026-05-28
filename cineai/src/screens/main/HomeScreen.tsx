@@ -28,6 +28,7 @@ import { apiClient } from '../../services/api/apiClient';
 import { chatService } from '../../services/api/chatService';
 import { mapTmdbToMovie, numberToImdbId, tmdbApi } from '../../services/tmdbApi';
 import { QuickProfileMenu } from '../../components/ui/QuickProfileMenu';
+import { useLanguageStore } from '../../store/languageStore';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 const HERO_HEIGHT = Math.max(420, Math.floor(SCREEN_HEIGHT * 0.58));
@@ -574,6 +575,8 @@ const HeroBanner: React.FC<{
 export const HomeScreen: React.FC = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
+  const t = useLanguageStore(state => state.t);
+  const language = useLanguageStore(state => state.language);
   const { profile } = useAuthStore();
   const {
     items: watchlistItems,
@@ -609,10 +612,85 @@ export const HomeScreen: React.FC = () => {
 
   const headerGreeting = useMemo(() => {
     const hour = new Date().getHours();
-    if (hour < 12) return 'Good morning';
-    if (hour < 18) return 'Good afternoon';
-    return 'Good evening';
-  }, []);
+    if (hour < 12) return t('home.greeting.morning');
+    if (hour < 18) return t('home.greeting.afternoon');
+    return t('home.greeting.evening');
+  }, [language]);
+
+  const localizedMood = useCallback((id: string, defaultLabel: string) => {
+    const moodTranslations: Record<string, Record<string, string>> = {
+      en: {
+        'dark-tense': 'Dark & Tense',
+        'feel-good': 'Feel Good',
+        'mind-bending': 'Mind-Bending',
+        'epic-grand': 'Epic & Grand',
+        'emotional-drama': 'Emotional Drama',
+        'late-night-thrillers': 'Late Night Thrillers',
+      },
+      es: {
+        'dark-tense': 'Oscuro y Tenso',
+        'feel-good': 'Buen Rollo',
+        'mind-bending': 'Mente Compleja',
+        'epic-grand': 'Épico y Grandioso',
+        'emotional-drama': 'Drama Emocional',
+        'late-night-thrillers': 'Thrillers Nocturnos',
+      },
+      fr: {
+        'dark-tense': 'Sombre et Tendu',
+        'feel-good': 'Sensationnel',
+        'mind-bending': 'Esprit tordu',
+        'epic-grand': 'Épique et grandiose',
+        'emotional-drama': 'Drame émotionnel',
+        'late-night-thrillers': 'Thrillers tardifs',
+      },
+      de: {
+        'dark-tense': 'Düster & Packend',
+        'feel-good': 'Gute Laune',
+        'mind-bending': 'Mind-Bending',
+        'epic-grand': 'Epos & Pracht',
+        'emotional-drama': 'Gefühlvolles Drama',
+        'late-night-thrillers': 'Späte Thriller',
+      },
+      hi: {
+        'dark-tense': 'डार्क और सस्पेंस',
+        'feel-good': 'अच्छा मूड',
+        'mind-bending': 'दिमाग हिलाने वाली',
+        'epic-grand': 'महाकाव्य और भव्य',
+        'emotional-drama': 'भावनात्मक ड्रामा',
+        'late-night-thrillers': 'देर रात के थ्रिलर',
+      },
+      ja: {
+        'dark-tense': 'ダーク＆サスペンス',
+        'feel-good': 'ほっこり・コメディ',
+        'mind-bending': 'マインドベンディング',
+        'epic-grand': 'スペクタクル・超大作',
+        'emotional-drama': '感動の人間ドラマ',
+        'late-night-thrillers': '真夜中のスリラー',
+      },
+      ko: {
+        'dark-tense': '어둡고 팽팽한',
+        'feel-good': '기분 좋은',
+        'mind-bending': '마인드벤딩',
+        'epic-grand': '웅장한 대서사시',
+        'emotional-drama': '감성 드라마',
+        'late-night-thrillers': '심야 스릴러',
+      },
+    };
+    return moodTranslations[language]?.[id] || defaultLabel;
+  }, [language]);
+
+  const localizedEmptyMood = useMemo(() => {
+    const emptyMessages: Record<string, string> = {
+      en: 'No titles available for this mood right now.',
+      es: 'No hay títulos disponibles para este estado de ánimo en este momento.',
+      fr: 'Aucun titre disponible pour cette ambiance pour le moment.',
+      de: 'Aktuell keine Filme für diese Stimmung verfügbar.',
+      hi: 'इस मूड के लिए अभी कोई फ़िल्म उपलब्ध नहीं है।',
+      ja: 'この気分の映画は現在ご利用いただけません।',
+      ko: '현재 이 감정 카테고리에 제공되는 영화가 없습니다.',
+    };
+    return emptyMessages[language] || emptyMessages.en;
+  }, [language]);
 
   const activeHeroMovie = heroMovies[heroIndex] || null;
 
@@ -671,6 +749,29 @@ export const HomeScreen: React.FC = () => {
   ): Promise<Movie[]> => {
     const limit = args.limit ?? 35;
 
+    // Load active content region dynamically
+    const region = await AsyncStorage.getItem('contentRegion') || 'global';
+    const regionParams: Record<string, any> = {};
+    if (region !== 'global') {
+      const REGION_COUNTRY_CODES: Record<string, string> = {
+        in: 'IN',
+        us: 'US',
+        jp: 'JP',
+        kr: 'KR',
+      };
+      const REGION_LANGUAGES: Record<string, string> = {
+        in: 'hi|te|ta|ml|kn|en',
+        jp: 'ja',
+        kr: 'ko',
+      };
+      if (REGION_COUNTRY_CODES[region]) {
+        regionParams.region = REGION_COUNTRY_CODES[region];
+      }
+      if (REGION_LANGUAGES[region]) {
+        regionParams.with_original_language = REGION_LANGUAGES[region];
+      }
+    }
+
     try {
       if (mode === 'trending') {
         const { data } = await apiClient.get<RawMoviePayload[]>('/movies/trending', { params: { limit } });
@@ -695,6 +796,7 @@ export const HomeScreen: React.FC = () => {
       const { data } = await apiClient.get<RawMoviePayload[]>('/movies/discover', {
         params: {
           ...discoverParams,
+          ...regionParams,
           vote_average_gte: discoverVoteAverageGte,
           vote_count_gte: discoverVoteCountGte,
           limit,
@@ -725,10 +827,11 @@ export const HomeScreen: React.FC = () => {
           sort_by: discoverParams.sort_by ? String(discoverParams.sort_by) : undefined,
           'vote_average.gte': discoverVoteAverageGte,
           'vote_count.gte': discoverVoteCountGte,
-          with_original_language: discoverParams.with_original_language ? String(discoverParams.with_original_language) : undefined,
+          with_original_language: regionParams.with_original_language || (discoverParams.with_original_language ? String(discoverParams.with_original_language) : undefined),
+          region: regionParams.region,
           primary_release_year: discoverParams.primary_release_year ? Number(discoverParams.primary_release_year) : undefined,
           limit,
-        });
+        } as any);
         return res.results;
       } catch (fallbackError) {
         console.log('[DEBUG] tmdbApi fallback failed:', fallbackError);
@@ -1234,7 +1337,7 @@ export const HomeScreen: React.FC = () => {
         <View style={styles.body}>
           {continueWatching.length > 0 ? (
             <View style={styles.sectionWrap}>
-              <SectionHeader title="Continue Watching" subtitle="From your real watch history" />
+              <SectionHeader title={t('home.section.continue')} subtitle={t('home.section.continueSub')} />
               <FlatList
                 data={continueWatching}
                 horizontal
@@ -1252,8 +1355,8 @@ export const HomeScreen: React.FC = () => {
 
           <View style={styles.sectionWrap}>
             <SectionHeader
-              title="AI Recommendations"
-              subtitle="Curated high-confidence picks"
+              title={t('home.section.ai')}
+              subtitle={t('home.section.aiSub')}
             />
             {bootLoading && aiRecommendations.length === 0 ? (
               <RailSkeleton />
@@ -1275,8 +1378,8 @@ export const HomeScreen: React.FC = () => {
 
           <View style={styles.sectionWrap}>
             <SectionHeader
-              title="Mood Discovery"
-              subtitle="Tap a mood to generate a live TMDB rail"
+              title={t('home.section.mood')}
+              subtitle={t('home.section.moodSub')}
             />
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.moodChipRow}>
@@ -1289,7 +1392,7 @@ export const HomeScreen: React.FC = () => {
                     onPress={() => refreshMoodRail(mood)}
                   >
                     <Text style={[styles.moodChipLabel, selected && styles.moodChipLabelSelected]} allowFontScaling={false}>
-                      {mood.label}
+                      {localizedMood(mood.id, mood.label)}
                     </Text>
                   </Pressable>
                 );
@@ -1312,7 +1415,7 @@ export const HomeScreen: React.FC = () => {
                 removeClippedSubviews
                 ListEmptyComponent={
                   <View style={styles.emptyMoodRail}>
-                    <Text style={styles.emptyMoodText} allowFontScaling={false}>No titles available for this mood right now.</Text>
+                    <Text style={styles.emptyMoodText} allowFontScaling={false}>{localizedEmptyMood}</Text>
                   </View>
                 }
               />
@@ -1321,7 +1424,10 @@ export const HomeScreen: React.FC = () => {
 
           {premiumRails.map(rail => (
             <View key={rail.id} style={styles.sectionWrap}>
-              <SectionHeader title={rail.title} subtitle={rail.subtitle} />
+              <SectionHeader
+                title={t(`rail.${rail.id}.title`) !== `rail.${rail.id}.title` ? t(`rail.${rail.id}.title`) : rail.title}
+                subtitle={t(`rail.${rail.id}.subtitle`) !== `rail.${rail.id}.subtitle` ? t(`rail.${rail.id}.subtitle`) : rail.subtitle}
+              />
               {rail.loading ? (
                 <RailSkeleton />
               ) : (

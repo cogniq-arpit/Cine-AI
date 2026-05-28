@@ -25,11 +25,12 @@ import { useAuthStore } from '../../store/authStore';
 import { QuickProfileMenu } from '../../components/ui/QuickProfileMenu';
 
 const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
-const HUB_CARD_WIDTH = Math.min(244, SCREEN_WIDTH * 0.72);
-const HUB_HERO_HEIGHT = Math.max(300, Math.floor(SCREEN_HEIGHT * 0.42));
-const LANDSCAPE_CARD_WIDTH = Math.min(244, SCREEN_WIDTH * 0.64);
+const HUB_CARD_WIDTH = Math.min(208, SCREEN_WIDTH * 0.58);
+const HUB_HERO_HEIGHT = Math.max(286, Math.floor(SCREEN_HEIGHT * 0.39));
+const LANDSCAPE_CARD_WIDTH = Math.min(238, SCREEN_WIDTH * 0.62);
 const LANDSCAPE_CARD_HEIGHT = Math.round(LANDSCAPE_CARD_WIDTH * 0.58);
 const CACHE_TTL_MS = 8 * 60 * 1000;
+const DAILY_ROTATION_BUCKET = Math.floor(Date.now() / (24 * 60 * 60 * 1000));
 
 interface RawMoviePayload {
   [key: string]: unknown;
@@ -85,7 +86,39 @@ const REPETITIVE_TITLE_TOKENS = [
   'avengers',
   'inception',
   'oppenheimer',
+  'batman',
+  'joker',
+  'spider man',
+  'star wars',
+  'jurassic',
+  'fast furious',
 ];
+
+const INTERNATIONAL_DISCOVERY_LANGS = new Set([
+  'ar',
+  'bn',
+  'da',
+  'de',
+  'es',
+  'fa',
+  'fr',
+  'hi',
+  'id',
+  'it',
+  'ja',
+  'kn',
+  'ko',
+  'ml',
+  'no',
+  'pl',
+  'pt',
+  'sv',
+  'ta',
+  'te',
+  'th',
+  'tr',
+  'zh',
+]);
 
 const FRANCHISE_STOPWORDS = new Set([
   'the',
@@ -580,6 +613,395 @@ const HUB_DEFS: PlatformHubDefinition[] = [
       },
     ],
   },
+  {
+    id: 'noir-mystery-vault',
+    label: 'NOIR & MYSTERY',
+    tagline: 'Shadow worlds, investigations, and pressure-cooked secrets',
+    ambiance: 'A premium corridor for crime systems, political tension, and slow-burn reveals',
+    palette: ['rgba(80,91,118,0.82)', 'rgba(38,45,62,0.72)', 'rgba(7,7,9,0.94)'],
+    collections: [
+      {
+        id: 'noir-neo-noir',
+        title: 'Neo-Noir',
+        subtitle: 'Modern shadow cinema with moral fog and city-night tension',
+        mode: 'search',
+        searchQuery: 'neo noir thriller film',
+      },
+      {
+        id: 'noir-detective-mysteries',
+        title: 'Detective Mysteries',
+        subtitle: 'Investigations, clues, and elegant reveal structures',
+        mode: 'discover',
+        discoverParams: {
+          with_genres: '9648|80|53',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.4,
+          vote_count_gte: 35,
+        },
+      },
+      {
+        id: 'noir-political-drama',
+        title: 'Political Drama',
+        subtitle: 'Power, compromise, and institutional pressure',
+        mode: 'search',
+        searchQuery: 'political drama thriller film',
+      },
+      {
+        id: 'noir-courtroom-drama',
+        title: 'Courtroom Drama',
+        subtitle: 'Legal conflict, testimony, and moral consequence',
+        mode: 'search',
+        searchQuery: 'courtroom drama film',
+      },
+      {
+        id: 'noir-slow-burn-thrillers',
+        title: 'Slow Burn Thrillers',
+        subtitle: 'Controlled dread and patient narrative escalation',
+        mode: 'discover',
+        discoverParams: {
+          with_genres: '53|18|9648',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.6,
+          vote_count_gte: 30,
+        },
+      },
+      {
+        id: 'noir-crime-syndicates',
+        title: 'Crime Syndicates',
+        subtitle: 'Underworld hierarchies and loyalty under pressure',
+        mode: 'discover',
+        discoverParams: {
+          with_genres: '80|18|53',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.5,
+          vote_count_gte: 35,
+        },
+      },
+      {
+        id: 'noir-heist-legends',
+        title: 'Heist Legends',
+        subtitle: 'Crew chemistry, precision plans, and clean reversals',
+        mode: 'search',
+        searchQuery: 'heist thriller film',
+      },
+    ],
+  },
+  {
+    id: 'cosmic-futures',
+    label: 'COSMIC FUTURES',
+    tagline: 'Space scale, speculative tech, and strange-contact cinema',
+    ambiance: 'A science-fiction ecosystem built for futures, machines, and impossible distance',
+    palette: ['rgba(54,137,176,0.8)', 'rgba(33,72,112,0.72)', 'rgba(7,7,9,0.94)'],
+    collections: [
+      {
+        id: 'cosmic-space-opera',
+        title: 'Space Opera',
+        subtitle: 'Grand futures, empires, rebels, and cosmic scale',
+        mode: 'search',
+        searchQuery: 'space opera film',
+      },
+      {
+        id: 'cosmic-time-travel',
+        title: 'Time Travel',
+        subtitle: 'Loops, paradoxes, and memory-bending causality',
+        mode: 'search',
+        searchQuery: 'time travel science fiction film',
+      },
+      {
+        id: 'cosmic-retro-scifi',
+        title: 'Retro Sci-Fi',
+        subtitle: 'Analog futures, cult imagination, and vintage wonder',
+        mode: 'search',
+        searchQuery: 'retro science fiction film',
+      },
+      {
+        id: 'cosmic-tech-ai-stories',
+        title: 'Tech & AI Stories',
+        subtitle: 'Synthetic minds, surveillance, and machine-age anxiety',
+        mode: 'discover',
+        discoverParams: {
+          with_genres: '878|53|18',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.2,
+          vote_count_gte: 30,
+        },
+      },
+      {
+        id: 'cosmic-cyber-thriller',
+        title: 'Cyber Thriller',
+        subtitle: 'Digital paranoia, hackers, and networked conspiracies',
+        mode: 'search',
+        searchQuery: 'cyber thriller film',
+      },
+      {
+        id: 'cosmic-alien-encounters',
+        title: 'Alien Encounters',
+        subtitle: 'First contact, invasion dread, and off-world mystery',
+        mode: 'discover',
+        discoverParams: {
+          with_genres: '878|27|9648',
+          sort_by: 'popularity.desc',
+          vote_average_gte: 5.8,
+          vote_count_gte: 35,
+        },
+      },
+      {
+        id: 'cosmic-post-apocalyptic',
+        title: 'Post-Apocalyptic Worlds',
+        subtitle: 'After-collapse societies and survival-scale worldbuilding',
+        mode: 'search',
+        searchQuery: 'post apocalyptic science fiction film',
+      },
+    ],
+  },
+  {
+    id: 'horror-lore',
+    label: 'HORROR LORE',
+    tagline: 'Nightmare mythologies, haunted formats, and creature worlds',
+    ambiance: 'A genre crypt for psychological dread, monsters, and folklore after dark',
+    palette: ['rgba(42,128,105,0.8)', 'rgba(24,73,62,0.72)', 'rgba(7,7,9,0.94)'],
+    collections: [
+      {
+        id: 'horror-found-footage',
+        title: 'Found Footage',
+        subtitle: 'Raw perspectives, haunted media, and documentary dread',
+        mode: 'search',
+        searchQuery: 'found footage horror film',
+      },
+      {
+        id: 'horror-psychological',
+        title: 'Psychological Horror',
+        subtitle: 'Unstable minds, unreliable reality, and intimate fear',
+        mode: 'discover',
+        discoverParams: {
+          with_genres: '27|53|9648',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.2,
+          vote_count_gte: 25,
+        },
+      },
+      {
+        id: 'horror-monster-universe',
+        title: 'Monster Universe',
+        subtitle: 'Creatures, kaiju, and myth-scale terror',
+        mode: 'search',
+        searchQuery: 'monster horror creature feature film',
+      },
+      {
+        id: 'horror-vampire-lore',
+        title: 'Vampire Lore',
+        subtitle: 'Bloodlines, gothic myth, and immortal melancholy',
+        mode: 'search',
+        searchQuery: 'vampire lore film',
+      },
+      {
+        id: 'horror-survival-cinema',
+        title: 'Survival Cinema',
+        subtitle: 'Hostile environments and human endurance under threat',
+        mode: 'discover',
+        discoverParams: {
+          with_genres: '53|18|12',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.2,
+          vote_count_gte: 28,
+        },
+      },
+      {
+        id: 'horror-dark-comedy',
+        title: 'Dark Comedy',
+        subtitle: 'Bleak jokes, genre subversion, and sharp social teeth',
+        mode: 'search',
+        searchQuery: 'dark comedy thriller film',
+      },
+    ],
+  },
+  {
+    id: 'prestige-festival',
+    label: 'PRESTIGE FESTIVAL',
+    tagline: 'Auteur discoveries, festival favorites, and intimate craft',
+    ambiance: 'A quieter premium lane for awards heat, indie voices, and critical discoveries',
+    palette: ['rgba(126,83,64,0.78)', 'rgba(70,50,47,0.72)', 'rgba(7,7,9,0.94)'],
+    collections: [
+      {
+        id: 'prestige-indie-masterpieces',
+        title: 'Indie Masterpieces',
+        subtitle: 'Small-scale filmmaking with outsized emotional precision',
+        mode: 'search',
+        searchQuery: 'indie masterpiece film',
+      },
+      {
+        id: 'prestige-festival-favorites',
+        title: 'Festival Favorites',
+        subtitle: 'Cannes, Venice, Sundance, and Berlinale-adjacent cinema',
+        mode: 'search',
+        searchQuery: 'festival favorite film',
+      },
+      {
+        id: 'prestige-arthouse-cinema',
+        title: 'Arthouse Cinema',
+        subtitle: 'Formal ambition, auteur signatures, and patient images',
+        mode: 'search',
+        searchQuery: 'arthouse cinema film',
+      },
+      {
+        id: 'prestige-true-story-adaptations',
+        title: 'True Story Adaptations',
+        subtitle: 'Real events shaped into cinematic memory',
+        mode: 'search',
+        searchQuery: 'true story adaptation film',
+      },
+      {
+        id: 'prestige-historical-fiction',
+        title: 'Historical Fiction',
+        subtitle: 'Period worlds with character-forward dramatic stakes',
+        mode: 'discover',
+        discoverParams: {
+          with_genres: '36|18',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.5,
+          vote_count_gte: 35,
+        },
+      },
+      {
+        id: 'prestige-coming-of-age',
+        title: 'Emotional Coming-of-Age',
+        subtitle: 'Identity, first loss, and tender self-discovery',
+        mode: 'search',
+        searchQuery: 'emotional coming of age film',
+      },
+    ],
+  },
+  {
+    id: 'action-adventure-realms',
+    label: 'ACTION REALMS',
+    tagline: 'Missions, battles, escapes, oceans, speed, and mastery',
+    ambiance: 'A kinetic map of physical cinema that reaches beyond generic action rows',
+    palette: ['rgba(156,60,48,0.8)', 'rgba(94,36,39,0.72)', 'rgba(7,7,9,0.94)'],
+    collections: [
+      {
+        id: 'action-war-epics',
+        title: 'War Epics',
+        subtitle: 'Large-scale conflict, sacrifice, and battlefield consequence',
+        mode: 'discover',
+        discoverParams: {
+          with_genres: '10752|18|36',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.4,
+          vote_count_gte: 35,
+        },
+      },
+      {
+        id: 'action-spy-universes',
+        title: 'Spy Universes',
+        subtitle: 'Tradecraft, double-crosses, and geopolitical momentum',
+        mode: 'search',
+        searchQuery: 'spy thriller film',
+      },
+      {
+        id: 'action-prison-break',
+        title: 'Prison Break Stories',
+        subtitle: 'Confinement, strategy, and impossible escapes',
+        mode: 'search',
+        searchQuery: 'prison break film',
+      },
+      {
+        id: 'action-disaster-cinema',
+        title: 'Disaster Cinema',
+        subtitle: 'Systems failing at spectacle scale',
+        mode: 'search',
+        searchQuery: 'disaster cinema film',
+      },
+      {
+        id: 'action-oceanic-adventures',
+        title: 'Oceanic Adventures',
+        subtitle: 'Sea voyages, survival waters, and maritime awe',
+        mode: 'search',
+        searchQuery: 'ocean adventure film',
+      },
+      {
+        id: 'action-racing-cinema',
+        title: 'Racing Cinema',
+        subtitle: 'Speed, rivalry, and machine-driven adrenaline',
+        mode: 'search',
+        searchQuery: 'racing cinema film',
+      },
+      {
+        id: 'action-martial-arts',
+        title: 'Martial Arts Masters',
+        subtitle: 'Body-led choreography, discipline, and kinetic grace',
+        mode: 'search',
+        searchQuery: 'martial arts masterpiece film',
+      },
+      {
+        id: 'action-90s-blockbusters',
+        title: '90s Blockbusters',
+        subtitle: 'Practical spectacle and high-concept crowd energy',
+        mode: 'search',
+        searchQuery: '1990s blockbuster action film',
+      },
+    ],
+  },
+  {
+    id: 'global-heritage-gems',
+    label: 'WORLD HERITAGE',
+    tagline: 'International gems, mythic histories, and regional mastery',
+    ambiance: 'A global cinema ecosystem tuned for non-obvious discoveries and cultural texture',
+    palette: ['rgba(76,116,91,0.78)', 'rgba(42,74,61,0.72)', 'rgba(7,7,9,0.94)'],
+    collections: [
+      {
+        id: 'heritage-samurai-cinema',
+        title: 'Samurai Cinema',
+        subtitle: 'Honor, duels, feudal pressure, and disciplined frames',
+        mode: 'search',
+        searchQuery: 'samurai cinema film',
+      },
+      {
+        id: 'heritage-mythological-fantasy',
+        title: 'Mythological Fantasy',
+        subtitle: 'Gods, legends, and sacred-story spectacle',
+        mode: 'search',
+        searchQuery: 'mythological fantasy film',
+      },
+      {
+        id: 'heritage-underrated-international',
+        title: 'Underrated International Gems',
+        subtitle: 'High-quality discoveries beyond the usual English-language loop',
+        mode: 'discover',
+        discoverParams: {
+          with_original_language: 'ko|ja|fr|es|de|it|pt|tr|id|th|fa|zh',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.9,
+          vote_count_gte: 18,
+        },
+      },
+      {
+        id: 'heritage-global-crime',
+        title: 'International Crime',
+        subtitle: 'Local underworlds, procedural detail, and regional stakes',
+        mode: 'discover',
+        discoverParams: {
+          with_original_language: 'ko|ja|fr|es|de|it|pt|tr',
+          with_genres: '80|53',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.5,
+          vote_count_gte: 20,
+        },
+      },
+      {
+        id: 'heritage-world-animation',
+        title: 'World Animation',
+        subtitle: 'Animated visions beyond familiar studio defaults',
+        mode: 'discover',
+        discoverParams: {
+          with_original_language: 'ja|fr|es|zh|ko',
+          with_genres: '16|14|18',
+          sort_by: 'vote_average.desc',
+          vote_average_gte: 6.6,
+          vote_count_gte: 18,
+        },
+      },
+    ],
+  },
 ];
 
 const genreLabelMap: Record<number, string> = {
@@ -589,14 +1011,18 @@ const genreLabelMap: Record<number, string> = {
   18: 'Drama',
   27: 'Horror',
   28: 'Action',
+  36: 'History',
+  37: 'Western',
   35: 'Comedy',
   53: 'Thriller',
   80: 'Crime',
+  99: 'Documentary',
   878: 'Sci-Fi',
   9648: 'Mystery',
   10402: 'Music',
   10749: 'Romance',
   10751: 'Family',
+  10752: 'War',
 };
 
 const releaseYear = (date: string | undefined): string => {
@@ -653,21 +1079,54 @@ const sanitizeMovieList = (movies: Movie[]): Movie[] => {
   });
 };
 
-const rankMovie = (movie: Movie): number => {
+const isHiddenGemMovie = (movie: Movie): boolean => {
+  return (
+    movie.vote_average >= 6.8 &&
+    movie.vote_count >= 18 &&
+    movie.vote_count <= 4200 &&
+    movie.popularity <= 620
+  );
+};
+
+const isInternationalMovie = (movie: Movie): boolean => {
+  return INTERNATIONAL_DISCOVERY_LANGS.has(movie.original_language || '');
+};
+
+const saltFromKey = (key: string): number => {
+  return key.split('').reduce((sum, char) => sum + char.charCodeAt(0), 0);
+};
+
+const freshnessNoise = (movie: Movie, saltKey = ''): number => {
+  const seed = movie.id * 12.9898 + (DAILY_ROTATION_BUCKET + saltFromKey(saltKey)) * 78.233;
+  const raw = Math.sin(seed) * 43758.5453;
+  return raw - Math.floor(raw);
+};
+
+const rankMovie = (movie: Movie, saltKey = ''): number => {
   const titlePenalty = REPETITIVE_TITLE_TOKENS.some(token => normalizeTitle(movie.title).includes(token))
     ? 2.9
     : 0;
+  const mainstreamPenalty =
+    (movie.vote_count > 42000 ? 5.2 : movie.vote_count > 14000 ? 2.1 : 0) +
+    (movie.popularity > 900 ? 3.4 : 0);
+  const hiddenGemBoost = isHiddenGemMovie(movie) ? 8.4 : 0;
+  const internationalBoost = isInternationalMovie(movie) ? 4.2 : 0;
+  const freshnessBoost = freshnessNoise(movie, saltKey) * 5.2;
   const voteSignal = Math.log10(Math.max(1, movie.vote_count));
   return (
     movie.vote_average * 18 +
     voteSignal * 8.4 +
     Math.min(movie.popularity, 1300) * 0.015 -
-    titlePenalty
+    titlePenalty -
+    mainstreamPenalty +
+    hiddenGemBoost +
+    internationalBoost +
+    freshnessBoost
   );
 };
 
-const rankMovies = (movies: Movie[]): Movie[] => {
-  return [...movies].sort((a, b) => rankMovie(b) - rankMovie(a));
+const rankMovies = (movies: Movie[], saltKey = ''): Movie[] => {
+  return [...movies].sort((a, b) => rankMovie(b, saltKey) - rankMovie(a, saltKey));
 };
 
 const setCachedRail = (cacheKey: string, movies: Movie[]): void => {
@@ -704,8 +1163,9 @@ const selectDiverseList = (
   globalUsed: Set<number>,
   nearbyBlocked: Set<number>,
   desiredCount: number,
+  saltKey = '',
 ): Movie[] => {
-  const ranked = rankMovies(sanitizeMovieList(raw));
+  const ranked = rankMovies(sanitizeMovieList(raw), saltKey);
   const picks: Movie[] = [];
   const pickedIds = new Set<number>();
   const usedFranchises = new Set<string>();
@@ -746,6 +1206,31 @@ const selectDiverseList = (
     const primaryGenre = movie.genre_ids?.[0] ?? -1;
     genreUsage.set(primaryGenre, (genreUsage.get(primaryGenre) || 0) + 1);
   };
+
+  const commitFirstFrom = (queue: Movie[]): void => {
+    if (picks.length >= Math.min(3, desiredCount)) return;
+    const chosen = queue.find(movie =>
+      canPick(movie, {
+        ignoreGlobal: false,
+        ignoreFranchise: false,
+        ignoreGenreCap: false,
+        ignoreNearby: false,
+      }),
+    );
+    if (chosen) commit(chosen);
+  };
+
+  if (ranked[0] && canPick(ranked[0], {
+    ignoreGlobal: false,
+    ignoreFranchise: false,
+    ignoreGenreCap: false,
+    ignoreNearby: false,
+  })) {
+    commit(ranked[0]);
+  }
+
+  commitFirstFrom(ranked.filter(isHiddenGemMovie));
+  commitFirstFrom(ranked.filter(isInternationalMovie));
 
   const passes = [
     { ignoreGlobal: false, ignoreFranchise: false, ignoreGenreCap: false, ignoreNearby: false },
@@ -993,7 +1478,7 @@ export const ExploreScreen: React.FC = () => {
           ),
         );
 
-        const merged = rankMovies(sanitizeMovieList(batches.flat()));
+        const merged = rankMovies(sanitizeMovieList(batches.flat()), cacheKey);
         if (merged.length >= 10) {
           return merged;
         }
@@ -1061,7 +1546,7 @@ export const ExploreScreen: React.FC = () => {
         raw = [...raw, ...fallbackBatches[0], ...fallbackBatches[1]];
       }
 
-      const selected = selectDiverseList(raw, usedIds, nearbyIds, 10);
+      const selected = selectDiverseList(raw, usedIds, nearbyIds, 10, `${hubId}-${collection.id}`);
       builtCollections.push({
         ...collection,
         movies: selected,
@@ -1078,7 +1563,7 @@ export const ExploreScreen: React.FC = () => {
     }
 
     const spotlightPool = builtCollections.flatMap(collection => collection.movies);
-    const spotlight = rankMovies(spotlightPool)[0] || null;
+    const spotlight = rankMovies(spotlightPool, hubId)[0] || null;
     if (spotlight) {
       prefetchMovieAssets(spotlight).catch(() => {});
     }
@@ -1212,63 +1697,89 @@ export const ExploreScreen: React.FC = () => {
         }}
         scrollEventThrottle={16}
       >
-        <View style={[styles.body, { paddingTop: insets.top + 92 }]}>
-          <LinearGradient
-            colors={['rgba(255,255,255,0.06)', 'rgba(255,255,255,0.02)']}
-            style={styles.introCard}
-          >
-            <Text style={styles.introEyebrow} allowFontScaling={false}>
-              Explore is category-first
-            </Text>
-            <Text style={styles.introTitle} allowFontScaling={false}>
-              Enter cinematic ecosystems, not another recommendation feed.
-            </Text>
-            <Text style={styles.introBody} allowFontScaling={false}>
-              Switch hubs to browse platform-inspired universes powered entirely by live TMDB discovery.
-            </Text>
-          </LinearGradient>
+        <View style={[styles.body, { paddingTop: insets.top + 82 }]}>
+          <View style={styles.exploreHero}>
+            <LinearGradient
+              pointerEvents="none"
+              colors={[activeHub.palette[0], 'rgba(18,18,26,0.72)', 'rgba(7,7,9,0.98)']}
+              start={{ x: 0, y: 0 }}
+              end={{ x: 1, y: 1 }}
+              style={StyleSheet.absoluteFill}
+            />
+            <LinearGradient
+              pointerEvents="none"
+              colors={['rgba(255,255,255,0.08)', 'rgba(255,255,255,0)', 'rgba(7,7,9,0.52)']}
+              style={StyleSheet.absoluteFill}
+            />
 
-          <View style={styles.hubSelectorHeader}>
-            <Text style={styles.hubSelectorTitle} allowFontScaling={false}>Choose A Hub</Text>
-            <Text style={styles.hubSelectorSubtitle} allowFontScaling={false}>Tap a universe to reframe discovery</Text>
+            <View style={styles.exploreHeroHeader}>
+              <View style={styles.exploreHeroCopy}>
+                <Text style={styles.introEyebrow} allowFontScaling={false}>
+                  Cinematic universes
+                </Text>
+                <Text style={styles.introTitle} allowFontScaling={false}>
+                  Enter cinematic ecosystems.
+                </Text>
+                <Text style={styles.introBody} allowFontScaling={false}>
+                  Streaming-style worlds, hidden gems, and global cinema paths powered by TMDB.
+                </Text>
+              </View>
+
+              <View style={styles.heroSignalPill}>
+                <Text style={styles.heroSignalText} allowFontScaling={false}>TMDB Live</Text>
+              </View>
+            </View>
+
+            <View style={styles.hubSelectorHeader}>
+              <View style={styles.hubSelectorTextGroup}>
+                <Text style={styles.hubSelectorTitle} allowFontScaling={false}>Choose a Hub</Text>
+                <Text style={styles.hubSelectorSubtitle} numberOfLines={1} allowFontScaling={false}>
+                  {activeHub.ambiance}
+                </Text>
+              </View>
+              <Text style={styles.hubSelectorCount} allowFontScaling={false}>
+                {HUB_DEFS.length} worlds
+              </Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.hubCardRow}
+            >
+              {HUB_DEFS.map(hub => {
+                const selected = hub.id === activeHub.id;
+                return (
+                  <Pressable
+                    key={hub.id}
+                    style={[styles.hubCard, selected && styles.hubCardSelected]}
+                    onPress={() => {
+                      Haptics.selectionAsync().catch(() => {});
+                      setActiveHubId(hub.id);
+                      loadHub(hub.id, false).catch(() => {});
+                    }}
+                  >
+                    <LinearGradient
+                      colors={hub.palette}
+                      style={StyleSheet.absoluteFill}
+                    />
+                    <View style={styles.hubCardOverlay} />
+                    <View style={[styles.hubActiveRail, selected && styles.hubActiveRailSelected]} />
+                    <Text style={styles.hubCardLabel} numberOfLines={1} allowFontScaling={false}>{hub.label}</Text>
+                    <Text style={styles.hubCardTagline} numberOfLines={2} allowFontScaling={false}>
+                      {hub.tagline}
+                    </Text>
+                    {selected ? (
+                      <View style={styles.hubSelectedPill}>
+                        <Ionicons name="checkmark" size={11} color={Colors.text.primary} />
+                        <Text style={styles.hubSelectedText} allowFontScaling={false}>Active</Text>
+                      </View>
+                    ) : null}
+                  </Pressable>
+                );
+              })}
+            </ScrollView>
           </View>
-
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.hubCardRow}
-          >
-            {HUB_DEFS.map(hub => {
-              const selected = hub.id === activeHub.id;
-              return (
-                <Pressable
-                  key={hub.id}
-                  style={[styles.hubCard, selected && styles.hubCardSelected]}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    setActiveHubId(hub.id);
-                    loadHub(hub.id, false).catch(() => {});
-                  }}
-                >
-                  <LinearGradient
-                    colors={hub.palette}
-                    style={StyleSheet.absoluteFill}
-                  />
-                  <View style={styles.hubCardOverlay} />
-                  <Text style={styles.hubCardLabel} allowFontScaling={false}>{hub.label}</Text>
-                  <Text style={styles.hubCardTagline} numberOfLines={2} allowFontScaling={false}>
-                    {hub.tagline}
-                  </Text>
-                  {selected ? (
-                    <View style={styles.hubSelectedPill}>
-                      <Ionicons name="checkmark" size={12} color={Colors.text.primary} />
-                      <Text style={styles.hubSelectedText} allowFontScaling={false}>Active</Text>
-                    </View>
-                  ) : null}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
 
           {activeHubState?.loading && !activeHubState.spotlight ? (
             <View style={styles.hubHeroSkeleton}>
@@ -1286,9 +1797,14 @@ export const ExploreScreen: React.FC = () => {
                 transition={240}
                 cachePolicy="memory-disk"
               />
-              <LinearGradient colors={activeHub.palette} style={StyleSheet.absoluteFill} />
               <LinearGradient
-                colors={['rgba(7,7,9,0.1)', 'rgba(7,7,9,0.65)', 'rgba(7,7,9,0.96)']}
+                colors={[activeHub.palette[0], activeHub.palette[1], 'rgba(7,7,9,0.94)']}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={[StyleSheet.absoluteFill, styles.hubHeroTint]}
+              />
+              <LinearGradient
+                colors={['rgba(7,7,9,0.05)', 'rgba(7,7,9,0.5)', 'rgba(7,7,9,0.97)']}
                 style={StyleSheet.absoluteFill}
               />
 
@@ -1378,7 +1894,7 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 30,
     paddingHorizontal: 20,
-    paddingBottom: 12,
+    paddingBottom: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1391,7 +1907,7 @@ const styles = StyleSheet.create({
   },
   topLabel: {
     color: Colors.text.tertiary,
-    fontSize: 10,
+    fontSize: 9.5,
     fontFamily: Typography.fontMedium,
     letterSpacing: 1.15,
     textTransform: 'uppercase',
@@ -1399,8 +1915,8 @@ const styles = StyleSheet.create({
   topTitle: {
     marginTop: 3,
     color: Colors.text.primary,
-    fontSize: 24,
-    letterSpacing: -0.3,
+    fontSize: 21,
+    letterSpacing: -0.2,
     fontFamily: Typography.fontDisplay,
   },
   topActions: {
@@ -1438,101 +1954,163 @@ const styles = StyleSheet.create({
   },
   body: {
     paddingHorizontal: 0,
-    gap: 18,
+    gap: 20,
   },
-  introCard: {
-    marginHorizontal: 20,
-    borderRadius: Radius.xl,
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
-    backgroundColor: 'rgba(255,255,255,0.02)',
-    padding: 16,
-    gap: 7,
+  exploreHero: {
+    overflow: 'hidden',
+    paddingTop: 20,
+    paddingBottom: 18,
+    gap: 17,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(12,12,18,0.88)',
+  },
+  exploreHeroHeader: {
+    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 14,
+  },
+  exploreHeroCopy: {
+    flex: 1,
+    gap: 5,
   },
   introEyebrow: {
     color: Colors.text.tertiary,
-    fontSize: 10,
+    fontSize: 9.5,
     fontFamily: Typography.fontMedium,
     textTransform: 'uppercase',
-    letterSpacing: 1.1,
+    letterSpacing: 1.05,
   },
   introTitle: {
     color: Colors.text.primary,
-    fontSize: 19,
-    lineHeight: 25,
+    fontSize: 25,
+    lineHeight: 30,
     fontFamily: Typography.fontDisplay,
-    letterSpacing: -0.3,
+    letterSpacing: -0.35,
   },
   introBody: {
     color: Colors.text.secondary,
     fontSize: 12,
-    lineHeight: 18,
+    lineHeight: 17,
     fontFamily: Typography.fontPrimary,
+  },
+  heroSignalPill: {
+    minHeight: 28,
+    borderRadius: Radius.full,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.15)',
+    backgroundColor: 'rgba(7,7,9,0.42)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 10,
+  },
+  heroSignalText: {
+    color: '#DDE4FC',
+    fontSize: 9.5,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    fontFamily: Typography.fontSemiBold,
   },
   hubSelectorHeader: {
     paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  hubSelectorTextGroup: {
+    flex: 1,
     gap: 2,
   },
   hubSelectorTitle: {
     color: Colors.text.primary,
-    fontSize: 16,
+    fontSize: 15,
     fontFamily: Typography.fontSemiBold,
   },
   hubSelectorSubtitle: {
     color: Colors.text.secondary,
     fontSize: 11,
+    lineHeight: 15,
     fontFamily: Typography.fontPrimary,
+  },
+  hubSelectorCount: {
+    color: Colors.text.tertiary,
+    fontSize: 10,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    fontFamily: Typography.fontMedium,
   },
   hubCardRow: {
     paddingHorizontal: 20,
-    gap: 12,
+    gap: 10,
+    paddingBottom: 2,
   },
   hubCard: {
     width: HUB_CARD_WIDTH,
-    minHeight: 118,
-    borderRadius: Radius.xl,
+    minHeight: 108,
+    borderRadius: Radius.lg,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(255,255,255,0.1)',
     overflow: 'hidden',
-    padding: 14,
-    justifyContent: 'space-between',
+    paddingHorizontal: 13,
+    paddingTop: 12,
+    paddingBottom: 32,
+    gap: 7,
+    backgroundColor: 'rgba(18,18,26,0.82)',
   },
   hubCardSelected: {
-    borderColor: 'rgba(230,57,70,0.68)',
-    transform: [{ scale: 1.02 }],
+    borderColor: 'rgba(240,180,41,0.52)',
+    backgroundColor: 'rgba(255,255,255,0.05)',
   },
   hubCardOverlay: {
     ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'rgba(7,7,9,0.12)',
+    backgroundColor: 'rgba(7,7,9,0.2)',
+  },
+  hubActiveRail: {
+    position: 'absolute',
+    left: 0,
+    top: 12,
+    bottom: 12,
+    width: 2,
+    borderRadius: Radius.full,
+    backgroundColor: 'rgba(255,255,255,0)',
+  },
+  hubActiveRailSelected: {
+    backgroundColor: Colors.accent.gold,
   },
   hubCardLabel: {
     color: Colors.text.primary,
-    fontSize: 10,
-    letterSpacing: 1.25,
+    fontSize: 9.5,
+    lineHeight: 13,
+    letterSpacing: 0.95,
     textTransform: 'uppercase',
     fontFamily: Typography.fontSemiBold,
   },
   hubCardTagline: {
     color: '#D8DAEA',
-    fontSize: 12,
-    lineHeight: 17,
+    fontSize: 11,
+    lineHeight: 15,
     fontFamily: Typography.fontPrimary,
   },
   hubSelectedPill: {
-    alignSelf: 'flex-start',
+    position: 'absolute',
+    left: 12,
+    bottom: 9,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
-    paddingHorizontal: 9,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: Radius.full,
     borderWidth: 1,
-    borderColor: 'rgba(230,57,70,0.62)',
-    backgroundColor: 'rgba(230,57,70,0.18)',
+    borderColor: 'rgba(240,180,41,0.42)',
+    backgroundColor: 'rgba(7,7,9,0.5)',
   },
   hubSelectedText: {
     color: Colors.text.primary,
-    fontSize: 10,
+    fontSize: 9.5,
     fontFamily: Typography.fontMedium,
   },
   hubHeroSkeleton: {
@@ -1551,17 +2129,21 @@ const styles = StyleSheet.create({
     borderRadius: Radius.xl,
     overflow: 'hidden',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.12)',
+    borderColor: 'rgba(255,255,255,0.11)',
+    backgroundColor: Colors.bg.surface,
   },
   hubHeroBackdrop: {
     ...StyleSheet.absoluteFillObject,
   },
+  hubHeroTint: {
+    opacity: 0.5,
+  },
   hubHeroContent: {
     flex: 1,
     justifyContent: 'flex-end',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-    gap: 6,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
+    gap: 7,
   },
   hubHeroEyebrow: {
     color: '#DDE4FC',
@@ -1572,9 +2154,9 @@ const styles = StyleSheet.create({
   },
   hubHeroTitle: {
     color: Colors.text.primary,
-    fontSize: 30,
-    lineHeight: 34,
-    letterSpacing: -0.5,
+    fontSize: 28,
+    lineHeight: 33,
+    letterSpacing: -0.4,
     fontFamily: Typography.fontDisplay,
   },
   hubHeroMeta: {
@@ -1611,19 +2193,20 @@ const styles = StyleSheet.create({
     fontFamily: Typography.fontMedium,
   },
   collectionsWrap: {
-    marginTop: 2,
-    gap: 20,
+    marginTop: 4,
+    gap: 24,
   },
   collectionBlock: {
-    gap: 10,
+    gap: 12,
+    paddingTop: 2,
   },
   collectionHeader: {
     paddingHorizontal: 20,
-    gap: 2,
+    gap: 3,
   },
   collectionTitle: {
     color: Colors.text.primary,
-    fontSize: 20,
+    fontSize: 19,
     letterSpacing: -0.2,
     fontFamily: Typography.fontDisplay,
   },
@@ -1635,7 +2218,7 @@ const styles = StyleSheet.create({
   },
   collectionRail: {
     paddingHorizontal: 20,
-    gap: 10,
+    gap: 12,
   },
   landscapeCard: {
     width: LANDSCAPE_CARD_WIDTH,

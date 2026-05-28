@@ -4,6 +4,7 @@ import { ChatSession, ChatMessage, Movie } from '../types';
 import { useAuthStore } from './authStore';
 import { chatService } from '../services/api/chatService';
 import tmdbApi, { CURATED_MOVIES } from '../services/tmdbApi';
+import { useLanguageStore } from './languageStore';
 
 const SESSIONS_KEY = '@cineai_chat_sessions';
 
@@ -176,9 +177,37 @@ export const useChatStore = create<ChatStore>((set, get) => ({
     try {
       // If user is authenticated AND is not a guest, call the real FastAPI backend first!
       const isLoggedIn = !!useAuthStore.getState().user && !useAuthStore.getState().isGuest;
+      
+      // Load active language and AI personality preference for context injection
+      const language = useLanguageStore.getState().language;
+      const aiPersonality = await AsyncStorage.getItem('aiPersonality') || 'critic';
+
+      const personalityNames: Record<string, string> = {
+        critic: 'Cinematic Critic',
+        friend: 'Casual Friend',
+        expert: 'Film Expert',
+        hype: 'Hype Recommender',
+        companion: 'Chill Companion',
+        nerd: 'Dark Cinema Nerd',
+      };
+      const languageNames: Record<string, string> = {
+        en: 'English',
+        es: 'Spanish',
+        fr: 'French',
+        de: 'German',
+        hi: 'Hindi',
+        ja: 'Japanese',
+        ko: 'Korean',
+      };
+
+      const activePersonality = personalityNames[aiPersonality] || 'Cinematic Critic';
+      const activeLanguage = languageNames[language] || 'English';
+
+      const systemInstruction = `\n\n[Adopt personality: ${activePersonality}][IMPORTANT: Respond in the language: ${activeLanguage}]`;
+      const payloadContent = content + systemInstruction;
 
       if (isLoggedIn) {
-        const backendRes = await chatService.postMessage(session.id, content);
+        const backendRes = await chatService.postMessage(session.id, payloadContent);
         const parsedRes = await parseBackendJSONAndFetch(backendRes.content);
         
         assistantMessage = {
@@ -201,7 +230,7 @@ export const useChatStore = create<ChatStore>((set, get) => ({
           content: msg.content,
         }));
 
-        const backendRes = await chatService.postGuestMessage(content, historyContext);
+        const backendRes = await chatService.postGuestMessage(payloadContent, historyContext);
         const parsedRes = await parseBackendJSONAndFetch(backendRes.content);
 
         assistantMessage = {

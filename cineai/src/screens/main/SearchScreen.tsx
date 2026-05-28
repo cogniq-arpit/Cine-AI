@@ -21,6 +21,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Colors, Radius, Typography } from '../../constants/theme';
 import tmdbApi from '../../services/tmdbApi';
 import { apiClient } from '../../services/api/apiClient';
+import { useLanguageStore } from '../../store/languageStore';
 import type { Genre, Movie, PaginatedResponse, RootStackParamList } from '../../types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
@@ -387,6 +388,237 @@ const SearchResultRow: React.FC<{
 };
 
 const SearchScreen: React.FC = () => {
+  const localizedSearch = useCallback((key: string, defaultValue: string) => {
+    const searchTranslations: Record<string, Record<string, string>> = {
+      en: {
+        'search.placeholder': 'Search movies, TV, actors, genres, franchises...',
+        'search.trending': 'Dynamic Trending Searches',
+        'search.genreGrid': 'Genre Discovery Grid',
+        'search.genreGridSub': 'Tap any genre for real TMDB-powered discovery',
+        'search.collections': 'Streaming Collections',
+        'search.collectionsSub': 'Platform-inspired hubs powered by live TMDB data',
+        'search.recent': 'Recently Searched',
+        'search.recentSub': 'Jump back into your last discovery paths',
+        'search.clear': 'Clear',
+        'search.discover': 'Discover',
+        'search.building': 'Building your cinematic results...',
+        'search.featured': 'Featured Match',
+        'search.noMatch': 'No cinematic matches found',
+        'search.noMatchSub': 'Try another title, actor, franchise, or genre keyword.',
+        'collection.award-winners.title': 'Award Winners',
+        'collection.award-winners.subtitle': 'Prestige titles with strong critical momentum',
+        'collection.trending-worldwide.title': 'Trending Worldwide',
+        'collection.trending-worldwide.subtitle': 'Global conversation heat right now',
+        'collection.hidden-gems.title': 'Hidden Gems',
+        'collection.hidden-gems.subtitle': 'High-rated titles outside blockbuster loops',
+        'collection.netflix-originals.title': 'Netflix Originals',
+        'collection.netflix-originals.subtitle': 'Platform-native stories with global reach',
+        'collection.anime-universe.title': 'Anime Universe',
+        'collection.anime-universe.subtitle': 'Japanese animation worlds and iconic arcs',
+        'collection.bollywood-spotlight.title': 'Bollywood Spotlight',
+        'collection.bollywood-spotlight.subtitle': 'Hindi cinema highlights with mass appeal',
+        'collection.korean-thrillers.title': 'Korean Thrillers',
+        'collection.korean-thrillers.subtitle': 'High-intensity Korean suspense picks',
+        'collection.scifi-worlds.title': 'Sci-Fi Worlds',
+        'collection.scifi-worlds.subtitle': 'Speculative futures and cosmic storytelling',
+      },
+      es: {
+        'search.placeholder': 'Buscar películas, programas de TV, actores...',
+        'search.trending': 'Tendencias de Búsqueda Dinámicas',
+        'search.genreGrid': 'Cuadrícula de Géneros',
+        'search.genreGridSub': 'Toca cualquier género para descubrir películas',
+        'search.collections': 'Colecciones de Streaming',
+        'search.collectionsSub': 'Hubs de plataformas con datos en vivo de TMDB',
+        'search.recent': 'Búsquedas Recientes',
+        'search.recentSub': 'Vuelve a tus últimos caminos de descubrimiento',
+        'search.clear': 'Borrar',
+        'search.discover': 'Descubrir',
+        'search.building': 'Construyendo tus resultados cinematográficos...',
+        'search.featured': 'Coincidencia Destacada',
+        'search.noMatch': 'No se encontraron coincidencias cinematográficas',
+        'search.noMatchSub': 'Prueba con otro título, actor o palabra clave.',
+        'collection.award-winners.title': 'Ganadoras de Premios',
+        'collection.award-winners.subtitle': 'Títulos prestigiosos con fuerte impulso crítico',
+        'collection.trending-worldwide.title': 'Tendencias Mundiales',
+        'collection.trending-worldwide.subtitle': 'Conversación global en este momento',
+        'collection.hidden-gems.title': 'Joyas Ocultas',
+        'collection.hidden-gems.subtitle': 'Títulos de alta calificación fuera de los circuitos de taquilla',
+        'collection.netflix-originals.title': 'Originales de Netflix',
+        'collection.netflix-originals.subtitle': 'Historias nativas de la plataforma con alcance global',
+        'collection.anime-universe.title': 'Universo Anime',
+        'collection.anime-universe.subtitle': 'Mundos de animación japonesa y arcos icónicos',
+        'collection.bollywood-spotlight.title': 'Enfoque en Bollywood',
+        'collection.bollywood-spotlight.subtitle': 'Destacados del cine hindi con atractivo masivo',
+        'collection.korean-thrillers.title': 'Thrillers Coreanos',
+        'collection.korean-thrillers.subtitle': 'Selecciones de suspenso coreano de alta intensidad',
+        'collection.scifi-worlds.title': 'Mundos de Ciencia Ficción',
+        'collection.scifi-worlds.subtitle': 'Futuros especulativos y narración cósmica',
+      },
+      fr: {
+        'search.placeholder': 'Rechercher des films, séries, acteurs...',
+        'search.trending': 'Tendances de recherche',
+        'search.genreGrid': 'Grille des genres',
+        'search.genreGridSub': 'Tapez sur un genre pour découvrir sur TMDB',
+        'search.collections': 'Collections en streaming',
+        'search.collectionsSub': 'Hubs inspirés des plateformes (données TMDB)',
+        'search.recent': 'Recherches récentes',
+        'search.recentSub': 'Reprenez vos dernières découvertes',
+        'search.clear': 'Effacer',
+        'search.discover': 'Découvrir',
+        'search.building': 'Préparation de vos résultats...',
+        'search.featured': 'Meilleure correspondance',
+        'search.noMatch': 'Aucun film trouvé',
+        'search.noMatchSub': 'Essayez un autre mot-clé, titre ou acteur.',
+        'collection.award-winners.title': 'Films primés',
+        'collection.award-winners.subtitle': 'Titres de prestige avec un fort élan critique',
+        'collection.trending-worldwide.title': 'Tendances mondiales',
+        'collection.trending-worldwide.subtitle': 'Sujets de conversation mondiaux actuels',
+        'collection.hidden-gems.title': 'Pépites cachées',
+        'collection.hidden-gems.subtitle': 'Titres très bien notés en dehors des grands circuits',
+        'collection.netflix-originals.title': 'Créations Netflix',
+        'collection.netflix-originals.subtitle': 'Histoires originales de la plateforme à portée mondiale',
+        'collection.anime-universe.title': 'Univers Anime',
+        'collection.anime-universe.subtitle': 'Mondes d\'animation japonaise et arcs emblématiques',
+        'collection.bollywood-spotlight.title': 'Pleins feux sur Bollywood',
+        'collection.bollywood-spotlight.subtitle': 'Cinéma hindi populaire à grand succès',
+        'collection.korean-thrillers.title': 'Thrillers coréens',
+        'collection.korean-thrillers.subtitle': 'Sélections de suspense coréen de haute intensité',
+        'collection.scifi-worlds.title': 'Mondes de SF',
+        'collection.scifi-worlds.subtitle': 'Futurs spéculatifs et narration cosmique',
+      },
+      de: {
+        'search.placeholder': 'Filme, Serien, Regisseure suchen...',
+        'search.trending': 'Aktuelle Suchtrends',
+        'search.genreGrid': 'Genre-Übersicht',
+        'search.genreGridSub': 'Tippe auf ein Genre für direkte TMDB-Suche',
+        'search.collections': 'Streaming-Sammlungen',
+        'search.collectionsSub': 'Beliebte Kanäle gefüttert mit TMDB-Daten',
+        'search.recent': 'Letzte Suchen',
+        'search.recentSub': 'Knüpfe an deine letzten Suchen an',
+        'search.clear': 'Löschen',
+        'search.discover': 'Entdecken',
+        'search.building': 'Ergebnisse werden geladen...',
+        'search.featured': 'Bester Treffer',
+        'search.noMatch': 'Keine Treffer gefunden',
+        'search.noMatchSub': 'Probiere ein anderes Stichwort, Genre oder Schauspieler.',
+        'collection.award-winners.title': 'Preisgekrönte Filme',
+        'collection.award-winners.subtitle': 'Anspruchsvolle Werke mit starkem kritischen Zuspruch',
+        'collection.trending-worldwide.title': 'Weltweite Trends',
+        'collection.trending-worldwide.subtitle': 'Globale Gesprächsthemen im Moment',
+        'collection.hidden-gems.title': 'Geheimtipps',
+        'collection.hidden-gems.subtitle': 'Herausragende Filme abseits des Mainstreams',
+        'collection.netflix-originals.title': 'Netflix Originals',
+        'collection.netflix-originals.subtitle': 'Plattform-eigene Geschichten mit globaler Reichweite',
+        'collection.anime-universe.title': 'Anime-Universum',
+        'collection.anime-universe.subtitle': 'Japanische Zeichentrickwelten und legendäre Sagen',
+        'collection.bollywood-spotlight.title': 'Bollywood-Fokus',
+        'collection.bollywood-spotlight.subtitle': 'Populäres Hindi-Kino mit breiter Anziehungskraft',
+        'collection.korean-thrillers.title': 'Koreanische Thriller',
+        'collection.korean-thrillers.subtitle': 'Hochspannende Thriller aus Südkorea',
+        'collection.scifi-worlds.title': 'Sci-Fi-Welten',
+        'collection.scifi-worlds.subtitle': 'Spekulative Zukünfte und kosmische Geschichten',
+      },
+      hi: {
+        'search.placeholder': 'फिल्में, टीवी शो, शैलियों को खोजें...',
+        'search.trending': 'सक्रिय ट्रेंडिंग खोजें',
+        'search.genreGrid': 'शैलियाँ ग्रिड',
+        'search.genreGridSub': 'TMDB-संचालित खोज के लिए शैली पर टैप करें',
+        'search.collections': 'स्ट्रीमिंग संग्रह',
+        'search.collectionsSub': 'TMDB डेटा द्वारा संचालित प्लेटफॉर्म हब',
+        'search.recent': 'हाल ही की खोजें',
+        'search.recentSub': 'अपने पिछले खोज पथों पर वापस जाएं',
+        'search.clear': 'साफ करें',
+        'search.discover': 'खोजें',
+        'search.building': 'परिणाम तैयार किए जा रहे हैं...',
+        'search.featured': 'विशेष मैच',
+        'search.noMatch': 'कोई मेल नहीं मिला',
+        'search.noMatchSub': 'कोई अन्य शीर्षक या शैली शब्द आज़माएं।',
+        'collection.award-winners.title': 'पुरस्कार विजेता',
+        'collection.award-winners.subtitle': 'मजबूत आलोचनात्मक गति वाली बेहतरीन फ़िल्में',
+        'collection.trending-worldwide.title': 'वैश्विक रुझान',
+        'collection.trending-worldwide.subtitle': 'इस समय दुनिया भर में चर्चित विषय',
+        'collection.hidden-gems.title': 'छिपे हुए रत्न',
+        'collection.hidden-gems.subtitle': 'मुख्यधारा से अलग उच्च श्रेणी की बेहतरीन फ़िल्में',
+        'collection.netflix-originals.title': 'नेटफ्लिक्स ओरिजिनल',
+        'collection.netflix-originals.subtitle': 'वैश्विक पहुंच वाली मूल कहानियां',
+        'collection.anime-universe.title': 'एनीमे ब्रह्मांड',
+        'collection.anime-universe.subtitle': 'जापानी एनीमेशन और लोकप्रिय सीरीज़',
+        'collection.bollywood-spotlight.title': 'बॉलीवुड स्पॉटलाइट',
+        'collection.bollywood-spotlight.subtitle': 'जन-अपील वाली हिंदी सिनेमा की मुख्य फ़िल्में',
+        'collection.korean-thrillers.title': 'कोरियाई थ्रिलर',
+        'collection.korean-thrillers.subtitle': 'उच्च तीव्रता वाले कोरियाई सस्पेंस थ्रिलर',
+        'collection.scifi-worlds.title': 'साइंस-फिक्शन दुनिया',
+        'collection.scifi-worlds.subtitle': 'काल्पनिक भविष्य और ब्रह्मांडीय कहानियां',
+      },
+      ja: {
+        'search.placeholder': '映画、TV番組、キャスト、ジャンルを検索...',
+        'search.trending': '急上昇ワード',
+        'search.genreGrid': 'ジャンルで探す',
+        'search.genreGridSub': 'タップしてTMDBリアルタイム作品検索',
+        'search.collections': '配信コレクション',
+        'search.collectionsSub': '各配信サービスをイメージした特設ハブ',
+        'search.recent': '最近の検索',
+        'search.recentSub': '前回の検索履歴から再開',
+        'search.clear': '履歴をクリア',
+        'search.discover': '見つける',
+        'search.building': '検索結果を集計中...',
+        'search.featured': '一番の候補',
+        'search.noMatch': '一致する作品が見つかりません',
+        'search.noMatchSub': '別のキーワード、作品名、キャストをお試しください。',
+        'collection.award-winners.title': '受賞作セレクト',
+        'collection.award-winners.subtitle': '世界の映画祭を賑わせた傑作選',
+        'collection.trending-worldwide.title': '世界トレンド',
+        'collection.trending-worldwide.subtitle': '世界中で今最も熱い作品のトーク',
+        'collection.hidden-gems.title': '隠れた名作',
+        'collection.hidden-gems.subtitle': '大ヒット枠外の超高評価作品',
+        'collection.netflix-originals.title': 'Netflix オリジナル',
+        'collection.netflix-originals.subtitle': '世界規模で展開するプラットフォーム作品',
+        'collection.anime-universe.title': 'アニメワールド',
+        'collection.anime-universe.subtitle': '日本のアニメ世界と名作エピソード',
+        'collection.bollywood-spotlight.title': 'ボリウッド特集',
+        'collection.bollywood-spotlight.subtitle': '大衆的人気を誇るインド・ヒンディー映画',
+        'collection.korean-thrillers.title': '韓国サスペンス',
+        'collection.korean-thrillers.subtitle': '世界を震撼させる超一級の韓国スリラー',
+        'collection.scifi-worlds.title': 'SF映画の世界',
+        'collection.scifi-worlds.subtitle': '遥かなる未来と宇宙のストーリー',
+      },
+      ko: {
+        'search.placeholder': '영화, TV, 배우, 장르, 프랜차이즈 검색...',
+        'search.trending': '실시간 급상승 검색',
+        'search.genreGrid': '장르 디렉토리',
+        'search.genreGridSub': '장르를 선택해 실시간 TMDB 발견을 해보세요',
+        'search.collections': '스트리밍 컬렉션',
+        'search.collectionsSub': '각 플랫폼별 인기작 허브',
+        'search.recent': '최근 검색어',
+        'search.recentSub': '이전 검색 기록 이어가기',
+        'search.clear': '지우기',
+        'search.discover': '둘러보기',
+        'search.building': '영화 검색 결과를 빌드하고 있습니다...',
+        'search.featured': '가장 유력한 매칭',
+        'search.noMatch': '일치하는 영화를 찾지 못했습니다',
+        'search.noMatchSub': '다른 제목, 장르, 혹은 인물명으로 검색해 보세요.',
+        'collection.award-winners.title': '수상작 컬렉션',
+        'collection.award-winners.subtitle': '전문가들의 호평을 한 몸에 받은 웰메이드 영화',
+        'collection.trending-worldwide.title': '글로벌 인기작',
+        'collection.trending-worldwide.subtitle': '지금 세계인들이 가장 많이 대화하는 영화',
+        'collection.hidden-gems.title': '숨겨진 보석',
+        'collection.hidden-gems.subtitle': '대중적이지 않지만 평점이 높은 명작',
+        'collection.netflix-originals.title': '넷플릭스 오리지널',
+        'collection.netflix-originals.subtitle': '글로벌한 반향을 불러일으키는 플랫폼 제작 영화',
+        'collection.anime-universe.title': '애니 유니버스',
+        'collection.anime-universe.subtitle': '일본 애니메이션 명작과 감동의 서사시',
+        'collection.bollywood-spotlight.title': '볼리우드 스포트라이트',
+        'collection.bollywood-spotlight.subtitle': '대중성을 갖춘 인도 힌디어 영화 화제작',
+        'collection.korean-thrillers.title': '한국 스릴러 명작',
+        'collection.korean-thrillers.subtitle': '극강의 몰입감을 선사하는 한국 서스펜스 인기작',
+        'collection.scifi-worlds.title': 'SF 세계관',
+        'collection.scifi-worlds.subtitle': '가상 미래와 광활한 우주 대서사시',
+      },
+    };
+    const activeLanguage = useLanguageStore.getState().language;
+    return searchTranslations[activeLanguage]?.[key] || defaultValue;
+  }, []);
+
   const insets = useSafeAreaInsets();
   const navigation = useNavigation<SearchNav>();
   const route = useRoute<RouteProp<RootStackParamList, 'Search'>>();
@@ -396,6 +628,8 @@ const SearchScreen: React.FC = () => {
   const suggestionDebounceRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const suggestionRequestIdRef = useRef(0);
   const suggestionCacheRef = useRef<Map<string, SuggestionCacheEntry>>(new Map());
+  const t = useLanguageStore(state => state.t);
+  const language = useLanguageStore(state => state.language);
 
   const [query, setQuery] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
@@ -1007,7 +1241,7 @@ const SearchScreen: React.FC = () => {
                   onChangeText={handleQueryChange}
                   onFocus={() => setInputFocused(true)}
                   onBlur={() => setInputFocused(false)}
-                  placeholder="Search movies, TV, actors, genres, franchises..."
+                  placeholder={localizedSearch('search.placeholder', 'Search movies, TV, actors, genres, franchises...')}
                   placeholderTextColor={Colors.text.tertiary}
                   style={styles.searchInput}
                   autoCorrect={false}
@@ -1052,7 +1286,7 @@ const SearchScreen: React.FC = () => {
             {!showResults ? (
               <View style={styles.discoveryWrap}>
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle} allowFontScaling={false}>Dynamic Trending Searches</Text>
+                  <Text style={styles.sectionTitle} allowFontScaling={false}>{localizedSearch('search.trending', 'Dynamic Trending Searches')}</Text>
                   <Text style={styles.sectionSubtitle} allowFontScaling={false}>{trendingSubtitle}</Text>
                 </View>
 
@@ -1102,9 +1336,9 @@ const SearchScreen: React.FC = () => {
                 )}
 
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle} allowFontScaling={false}>Genre Discovery Grid</Text>
+                  <Text style={styles.sectionTitle} allowFontScaling={false}>{localizedSearch('search.genreGrid', 'Genre Discovery Grid')}</Text>
                   <Text style={styles.sectionSubtitle} allowFontScaling={false}>
-                    Tap any genre for real TMDB-powered discovery
+                    {localizedSearch('search.genreGridSub', 'Tap any genre for real TMDB-powered discovery')}
                   </Text>
                 </View>
 
@@ -1158,9 +1392,9 @@ const SearchScreen: React.FC = () => {
                 )}
 
                 <View style={styles.sectionHeader}>
-                  <Text style={styles.sectionTitle} allowFontScaling={false}>Streaming Collections</Text>
+                  <Text style={styles.sectionTitle} allowFontScaling={false}>{localizedSearch('search.collections', 'Streaming Collections')}</Text>
                   <Text style={styles.sectionSubtitle} allowFontScaling={false}>
-                    Platform-inspired hubs powered by live TMDB data
+                    {localizedSearch('search.collectionsSub', 'Platform-inspired hubs powered by live TMDB data')}
                   </Text>
                 </View>
 
@@ -1174,14 +1408,16 @@ const SearchScreen: React.FC = () => {
                   <View style={styles.collectionGrid}>
                     {collections.map(collection => {
                       const lead = collection.movies[0];
+                      const localTitle = localizedSearch(`collection.${collection.id}.title`, collection.title);
+                      const localSubtitle = localizedSearch(`collection.${collection.id}.subtitle`, collection.subtitle);
                       return (
                         <Pressable
                           key={collection.id}
                           style={styles.collectionCard}
                           onPress={() => {
                             void runDiscovery(
-                              collection.title,
-                              collection.subtitle,
+                              localTitle,
+                              localSubtitle,
                               () => resolveCollectionResponse(collection),
                             );
                           }}
@@ -1202,10 +1438,10 @@ const SearchScreen: React.FC = () => {
                               <Ionicons name={collection.icon} size={14} color={Colors.accent.gold} />
                             </View>
                             <Text style={styles.collectionTitle} numberOfLines={2} allowFontScaling={false}>
-                              {collection.title}
+                              {localTitle}
                             </Text>
                             <Text style={styles.collectionSubtitle} numberOfLines={2} allowFontScaling={false}>
-                              {collection.subtitle}
+                              {localSubtitle}
                             </Text>
                           </View>
                         </Pressable>
@@ -1218,13 +1454,13 @@ const SearchScreen: React.FC = () => {
                   <View>
                     <View style={styles.sectionHeaderRow}>
                       <View>
-                        <Text style={styles.sectionTitle} allowFontScaling={false}>Recently Searched</Text>
+                        <Text style={styles.sectionTitle} allowFontScaling={false}>{localizedSearch('search.recent', 'Recently Searched')}</Text>
                         <Text style={styles.sectionSubtitle} allowFontScaling={false}>
-                          Jump back into your last discovery paths
+                          {localizedSearch('search.recentSub', 'Jump back into your last discovery paths')}
                         </Text>
                       </View>
                       <Pressable onPress={clearRecentSearches}>
-                        <Text style={styles.clearText} allowFontScaling={false}>Clear</Text>
+                        <Text style={styles.clearText} allowFontScaling={false}>{localizedSearch('search.clear', 'Clear')}</Text>
                       </Pressable>
                     </View>
                     <View style={styles.recentWrap}>
@@ -1254,7 +1490,7 @@ const SearchScreen: React.FC = () => {
                   <Pressable onPress={handleClearContext} style={styles.backToDiscoveryBtn}>
                     <Ionicons name="compass-outline" size={14} color={Colors.text.secondary} />
                     <Text style={styles.backToDiscoveryText} allowFontScaling={false}>
-                      Discover
+                      {localizedSearch('search.discover', 'Discover')}
                     </Text>
                   </Pressable>
                 </View>
@@ -1263,7 +1499,7 @@ const SearchScreen: React.FC = () => {
                   <View style={styles.resultsLoadingWrap}>
                     <ActivityIndicator size="small" color={Colors.accent.crimson} />
                     <Text style={styles.resultsLoadingText} allowFontScaling={false}>
-                      Building your cinematic results...
+                      {localizedSearch('search.building', 'Building your cinematic results...')}
                     </Text>
                   </View>
                 ) : null}
@@ -1282,7 +1518,7 @@ const SearchScreen: React.FC = () => {
                       style={StyleSheet.absoluteFill}
                     />
                     <View style={styles.featuredCopy}>
-                      <Text style={styles.featuredEyebrow} allowFontScaling={false}>Featured Match</Text>
+                      <Text style={styles.featuredEyebrow} allowFontScaling={false}>{localizedSearch('search.featured', 'Featured Match')}</Text>
                       <Text style={styles.featuredTitle} numberOfLines={2} allowFontScaling={false}>
                         {featuredMovie.title}
                       </Text>
@@ -1303,9 +1539,9 @@ const SearchScreen: React.FC = () => {
           showResults && !resultsLoading ? (
             <View style={styles.emptyWrap}>
               <Ionicons name="search-outline" size={40} color={Colors.text.tertiary} />
-              <Text style={styles.emptyTitle} allowFontScaling={false}>No cinematic matches found</Text>
+              <Text style={styles.emptyTitle} allowFontScaling={false}>{localizedSearch('search.noMatch', 'No cinematic matches found')}</Text>
               <Text style={styles.emptySubtitle} allowFontScaling={false}>
-                Try another title, actor, franchise, or genre keyword.
+                {localizedSearch('search.noMatchSub', 'Try another title, actor, franchise, or genre keyword.')}
               </Text>
             </View>
           ) : null
