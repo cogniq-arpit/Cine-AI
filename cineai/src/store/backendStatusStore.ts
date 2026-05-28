@@ -30,9 +30,9 @@ export const useBackendStatusStore = create<BackendStatusState>((set, get) => {
       
       const checkHealth = async () => {
         try {
-          // Perform a fast 3-second ping to the movies API to test response latency
+          // Perform a background wake-up ping to the movies API with a generous 60s timeout for cold-starts
           const res = await apiClient.get('/movies/trending', { 
-            timeout: 3000,
+            timeout: 60000,
             headers: { 'X-Health-Check': 'true' }
           });
           if (res && res.status === 200) {

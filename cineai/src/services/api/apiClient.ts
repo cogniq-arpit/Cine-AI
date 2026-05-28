@@ -59,8 +59,9 @@ export const backendStatusHolder = {
 // ─── REQUEST INTERCEPTOR: Inject Access Token ──────────────────────────────
 apiClient.interceptors.request.use(
   async (config: InternalAxiosRequestConfig) => {
-    // If backend is sleeping/cold-starting, enforce a strict 3.5s timeout so fallbacks trigger instantly
-    if (backendStatusHolder.status === 'SLEEPING') {
+    // If backend is sleeping/cold-starting, enforce a strict 3.5s timeout for normal requests so fallbacks trigger instantly
+    // We bypass this for background health checks so they can successfully wake up the sleeping Render server.
+    if (backendStatusHolder.status === 'SLEEPING' && !config.headers?.['X-Health-Check']) {
       config.timeout = 3500;
     }
     const token = await AsyncStorage.getItem('accessToken');
